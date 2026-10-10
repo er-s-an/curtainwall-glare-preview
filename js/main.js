@@ -460,7 +460,7 @@ function makeSky() {
         vec3 dir = normalize(vDir);
         float h = dir.y;
         vec3 col = h >= 0.0
-          ? mix(horizon, zenith, pow(clamp(h, 0.0, 1.0), 0.5))
+          ? mix(horizon, zenith, pow(clamp(h, 0.0, 1.0), 0.38))
           : mix(horizon, nadir, pow(clamp(-h, 0.0, 1.0), 0.75));
         vec3 sun = normalize(sunDir);
         float facing = max(dot(dir, sun), 0.0);
@@ -675,6 +675,7 @@ function frameHero(hero, subject) {
   const building = subject.building;
   const narrow = window.innerWidth < 860;
   const street = state.mode === "street";
+  const waterEnd = !!(hero && hero.hops.length && !street && hero.hops[hero.hops.length - 1].kind === "water");
   let focusE;
   let focusN;
   let focusZ;
@@ -682,13 +683,18 @@ function frameHero(hero, subject) {
     const joint = hero.hops[0].to;
     const end = hero.hops[hero.hops.length - 1].to;
     const from = hero.hops[0].from;
-    const wFrom = street ? 0.3 : 0.28;
-    const wJoint = street ? 0.24 : 0.5;
-    const wEnd = street ? 0.46 : 0.22;
+    const wFrom = street ? 0.3 : waterEnd ? 0.24 : 0.28;
+    const wJoint = street ? 0.24 : waterEnd ? 0.38 : 0.5;
+    const wEnd = street ? 0.46 : waterEnd ? 0.38 : 0.22;
     focusE = from[0] * wFrom + joint[0] * wJoint + end[0] * wEnd;
     focusN = from[1] * wFrom + joint[1] * wJoint + end[1] * wEnd;
-    const endZ = street ? end[2] : Math.min(end[2], joint[2] + 36);
-    focusZ = Math.max(6, from[2] * (street ? 0.22 : 0.34) + joint[2] * (street ? 0.2 : 0.46) + endZ * (street ? 0.58 : 0.2));
+    const endZ = street ? end[2] : (waterEnd ? end[2] : Math.min(end[2], joint[2] + 36));
+    focusZ = Math.max(
+      6,
+      from[2] * (street ? 0.22 : waterEnd ? 0.2 : 0.34)
+        + joint[2] * (street ? 0.2 : waterEnd ? 0.28 : 0.46)
+        + endZ * (street ? 0.58 : waterEnd ? 0.52 : 0.2),
+    );
   } else {
     const center = buildingCenter(building);
     focusE = center[0] + n[0] * 8;
@@ -701,7 +707,7 @@ function frameHero(hero, subject) {
   let eyeN = focusN + n[1] * dist * 0.82 + ty * dist * 0.55;
   let eyeZ = street
     ? focusZ + (narrow ? 22 : 30)
-    : Math.max(36, Math.min(120, focusZ * 0.28 + 28));
+    : focusZ + (waterEnd ? (narrow ? 36 : 58) : Math.max(18, Math.min(48, focusZ * 0.12 + 16)));
   [eyeE, eyeN, eyeZ] = standOff(eyeE, eyeN, eyeZ, focusE, focusN, focusZ, view.tile, dist * 0.72);
   const targetZ = Math.max(3, focusZ - (narrow ? 28 : 0));
   view.camera.fov = narrow ? 54 : 47;
@@ -882,7 +888,7 @@ function skyLook(elev) {
   if (elev < 20) {
     return { zenith: 0x6d92c2, horizon: 0xf3d3a6, nadir: 0xcbbba6, fog: 0xe6d2b4, sun: 0xffc27a, hemi: 0xf2d2b0, ground: 0x7d6c5c, intensity: 1.35, hemiI: 0.32 };
   }
-  return { zenith: 0x8eb6d8, horizon: 0xd5e6f2, nadir: 0xb7aea2, fog: 0xc9d7e4, sun: 0xfff3d4, hemi: 0xd5e6f2, ground: 0x8d8274, intensity: 1.85, hemiI: 0.38 };
+  return { zenith: 0x1a5c9c, horizon: 0xb9d0e6, nadir: 0xb7aea2, fog: 0xb7cbe0, sun: 0xfff3d4, hemi: 0xc5d7ea, ground: 0x8d8274, intensity: 1.62, hemiI: 0.32 };
 }
 
 function updateSun() {
