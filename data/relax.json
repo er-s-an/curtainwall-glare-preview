@@ -1,0 +1,172 @@
+{
+  "method": {
+    "panel_m": 4.0,
+    "alpha_deg": [
+      0,
+      50,
+      2.5
+    ],
+    "calendar": "2026-每月-15",
+    "hours_local": [
+      8,
+      10,
+      12,
+      14,
+      16
+    ],
+    "weather": "pvlib Ineichen 晴空，DNI≥50 且太阳高度>0 才计入",
+    "strict": "与全年 Gate 相同的几何：照不到（背光或入射被挡）不算失败；被照亮则反射仰角须高于地平，且 4000 m 内不进入邻楼 AABB。",
+    "street_only": "照不到不算失败；被照亮则反射不得先落到街面矩形（z=1.2 m，范围与全年街面热图相同，并挖去建筑足迹）。打进邻楼仍算只护街通过。",
+    "not_official": "这是搬移说明。不替换 results/*/gate_analysis.md 里的全年数字。"
+  },
+  "scenes": {
+    "A": {
+      "moments_scheduled": 60,
+      "moments_used": 60,
+      "panels": 1260,
+      "panel_times": 75600,
+      "strict_unsolved": 11255,
+      "street_unsolved": 0,
+      "relaxed": 11255,
+      "relaxed_onto_facade": 11255,
+      "relaxed_by_backlit": 0,
+      "strict_z_below_20": 1758,
+      "strict_z_at_least_20": 9497,
+      "street_z_below_20": 0,
+      "street_z_at_least_20": 0,
+      "street_rect": [
+        -80.0,
+        -70.0,
+        80.0,
+        70.0
+      ],
+      "altitude_m": 40.2,
+      "official": {
+        "headline": "无解",
+        "sentence": "香港九龙：无解。四侧邻楼使大量板元时刻在 0–50° 内无法导离周边建筑。无解不是方案可行。",
+        "tmy_unsolved": 14689432,
+        "tmy_total": 108077760,
+        "clear_unsolved": 16321943,
+        "clear_total": 125375040,
+        "rho": 0.3,
+        "windows": "2434/6085",
+        "window_longest_min": 290,
+        "drivers": "70/208",
+        "street_peak_Wm2": 306,
+        "ped_longest_min": 690,
+        "static_angle": null
+      }
+    },
+    "B": {
+      "moments_scheduled": 60,
+      "moments_used": 60,
+      "panels": 1480,
+      "panel_times": 88800,
+      "strict_unsolved": 425,
+      "street_unsolved": 0,
+      "relaxed": 425,
+      "relaxed_onto_facade": 425,
+      "relaxed_by_backlit": 0,
+      "strict_z_below_20": 331,
+      "strict_z_at_least_20": 94,
+      "street_z_below_20": 0,
+      "street_z_at_least_20": 0,
+      "street_rect": [
+        -90.0,
+        -130.0,
+        90.0,
+        40.0
+      ],
+      "altitude_m": 4.0,
+      "official": {
+        "headline": "无解",
+        "sentence": "深圳·深南大道量级主干道旁塔楼：无解。不是地王大厦，不是京基100，不是香港。无解不是方案可行。",
+        "tmy_unsolved": 658606,
+        "tmy_total": 127320000,
+        "clear_unsolved": 704609,
+        "clear_total": 149076000,
+        "rho": 0.25,
+        "windows": "600/768",
+        "window_longest_min": 110,
+        "drivers": "78/520",
+        "street_peak_Wm2": 257,
+        "ped_longest_min": 580,
+        "static_angle": null
+      }
+    },
+    "C": {
+      "moments_scheduled": 60,
+      "moments_used": 60,
+      "panels": 182,
+      "panel_times": 10920,
+      "strict_unsolved": 0,
+      "street_unsolved": 0,
+      "relaxed": 0,
+      "relaxed_onto_facade": 0,
+      "relaxed_by_backlit": 0,
+      "strict_z_below_20": 0,
+      "strict_z_at_least_20": 0,
+      "street_z_below_20": 0,
+      "street_z_at_least_20": 0,
+      "street_rect": [
+        -50.0,
+        -40.0,
+        50.0,
+        25.0
+      ],
+      "altitude_m": 4.0,
+      "official": {
+        "headline": "仅动态可解",
+        "sentence": "开阔对照（深圳湾岸线）：仅动态可解。没有无解板元时刻，也没有全楼统一角。仅动态可解不是方案可行。不是香港九龙，也不是深南大道旁塔楼。",
+        "tmy_unsolved": 0,
+        "tmy_total": 15447432,
+        "clear_unsolved": 0,
+        "clear_total": 18090800,
+        "rho": 0.3,
+        "windows": "无窗",
+        "window_longest_min": null,
+        "drivers": "46/96",
+        "street_peak_Wm2": 309,
+        "ped_longest_min": 570,
+        "static_angle": null
+      }
+    },
+    "walkie_talkie": {
+      "moments_scheduled": 60,
+      "moments_used": 55,
+      "panels": 494,
+      "panel_times": 27170,
+      "strict_unsolved": 0,
+      "street_unsolved": 0,
+      "relaxed": 0,
+      "relaxed_onto_facade": 0,
+      "relaxed_by_backlit": 0,
+      "strict_z_below_20": 0,
+      "strict_z_at_least_20": 0,
+      "street_z_below_20": 0,
+      "street_z_at_least_20": 0,
+      "street_rect": [
+        -70.0,
+        -110.0,
+        80.0,
+        15.0
+      ],
+      "altitude_m": 5.0,
+      "official": {
+        "headline": "仅动态可解",
+        "sentence": "伦敦金融城验证场景：仅动态可解。不是香港，不是深圳。凹面能在街面聚焦；没有无解板元时刻，也没有全楼统一角。仅动态可解不是方案可行。",
+        "tmy_unsolved": 0,
+        "tmy_total": 36146968,
+        "clear_unsolved": 0,
+        "clear_total": 48066200,
+        "rho": 0.3,
+        "windows": "无窗",
+        "window_longest_min": null,
+        "drivers": "22/64",
+        "street_peak_Wm2": 5291,
+        "ped_longest_min": 300,
+        "static_angle": null
+      }
+    }
+  }
+}

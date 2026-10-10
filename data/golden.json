@@ -1,0 +1,98 @@
+[
+  {
+    "scene": "A",
+    "stamp_local": "2026-06-21 12:00",
+    "timezone": "Asia/Hong_Kong",
+    "elev_deg": 84.1203,
+    "az_deg": 77.7516,
+    "sun": [
+      0.100108,
+      0.021733,
+      0.994739
+    ],
+    "alpha_deg": 0.0,
+    "panel_m": 4.0,
+    "counts": {
+      "panels": 1260,
+      "lit": 630,
+      "backlit": 630,
+      "shaded": 0,
+      "street": 630,
+      "neighbor": 0,
+      "sky": 0,
+      "other": 0
+    }
+  },
+  {
+    "scene": "A",
+    "stamp_local": "2026-06-21 12:00",
+    "timezone": "Asia/Hong_Kong",
+    "elev_deg": 84.1203,
+    "az_deg": 77.7516,
+    "sun": [
+      0.100108,
+      0.021733,
+      0.994739
+    ],
+    "alpha_deg": 30.0,
+    "panel_m": 4.0,
+    "counts": {
+      "panels": 1260,
+      "lit": 1260,
+      "backlit": 0,
+      "shaded": 0,
+      "street": 147,
+      "neighbor": 1101,
+      "sky": 0,
+      "other": 12
+    }
+  },
+  {
+    "scene": "A",
+    "stamp_local": "2026-12-21 09:30",
+    "timezone": "Asia/Hong_Kong",
+    "elev_deg": 28.1869,
+    "az_deg": 135.0115,
+    "sun": [
+      0.623127,
+      -0.623376,
+      0.47235
+    ],
+    "alpha_deg": 15.0,
+    "panel_m": 4.0,
+    "counts": {
+      "panels": 1260,
+      "lit": 350,
+      "backlit": 630,
+      "shaded": 280,
+      "street": 10,
+      "neighbor": 262,
+      "sky": 0,
+      "other": 78
+    }
+  },
+  {
+    "scene": "walkie_talkie",
+    "stamp_local": "2013-09-03 13:00",
+    "timezone": "Europe/London",
+    "elev_deg": 45.8861,
+    "az_deg": 180.137,
+    "sun": [
+      -0.001665,
+      -0.696085,
+      0.717958
+    ],
+    "alpha_deg": 0.0,
+    "panel_m": 4.0,
+    "counts": {
+      "panels": 494,
+      "lit": 494,
+      "backlit": 0,
+      "shaded": 0,
+      "street": 462,
+      "neighbor": 0,
+      "sky": 0,
+      "other": 32
+    }
+  }
+]

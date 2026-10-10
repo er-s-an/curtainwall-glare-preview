@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>幕墙折光 · 单时刻预览</title>
+  <meta name="description" content="幕墙倾角的单时刻反射落点预览。不是 SJG 188 专业评估软件。">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@430;620;760&family=Noto+Serif+SC:wght@600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <div class="wrap">
+    <header class="mast">
+      <div class="mark">
+        <i aria-hidden="true"></i>
+        <div>
+          <p class="kicker">参数化几何 · 单时刻</p>
+          <h1>幕墙折光</h1>
+        </div>
+      </div>
+      <nav id="side-nav"></nav>
+    </header>
+
+    <p class="banner">本页是单时刻几何预览，不是经国家认可检测机构测试或 SJG 188「专业评估」的评价软件。全年 Gate 来自已经跑完的扫描，下面的开关不改那些数字。</p>
+
+    <div class="scenes" id="scenes" role="group" aria-label="场景"></div>
+    <p class="scene-note" id="scene-note"></p>
+    <p class="gate" id="gate"></p>
+
+    <div class="layout">
+      <section class="stage" aria-label="落点">
+        <div class="legend" aria-hidden="true">
+          <span><i class="swatch" style="background:#e25a12"></i>街面热力</span>
+          <span><i class="swatch" style="background:#7a3048"></i>邻楼</span>
+          <span><i class="swatch" style="background:#1d6a62"></i>导天</span>
+          <span><i class="swatch" style="background:#ddd2bc"></i>街面范围</span>
+        </div>
+        <div class="canvas-wrap">
+          <canvas id="plan" width="800" height="640"></canvas>
+          <p id="sun-note" hidden></p>
+        </div>
+        <p class="caption" id="plan-cap"></p>
+        <canvas id="section" width="800" height="280"></canvas>
+        <p class="caption" id="section-cap"></p>
+      </section>
+
+      <form class="panel" id="controls">
+        <div class="modes" role="radiogroup" aria-label="这一时刻按什么口径着色">
+          <button type="button" role="radio" id="mode-both" aria-checked="true">连邻窗一起算</button>
+          <button type="button" role="radio" id="mode-street" aria-checked="false">只护街</button>
+        </div>
+        <p class="fine" id="mode-hint"></p>
+
+        <label class="slider">
+          <span class="row"><span>倾角 α</span><b id="alpha-val">30°</b></span>
+          <input id="alpha" type="range" min="0" max="50" step="0.5" value="30" aria-valuemin="0" aria-valuemax="50">
+        </label>
+        <label class="slider">
+          <span class="row"><span>日期</span><b id="date-val"></b></span>
+          <input id="doy" type="range" min="1" max="365" step="1">
+        </label>
+        <label class="slider">
+          <span class="row"><span>时刻</span><b id="time-val"></b></span>
+          <input id="clock" type="range" min="300" max="1140" step="10" value="720">
+        </label>
+        <label class="slider">
+          <span class="row"><span>年</span><b id="year-val">2026</b></span>
+          <input id="year" type="range" min="2013" max="2026" step="1" value="2026">
+        </label>
+        <label class="slider">
+          <span class="row"><span>反射比 ρ</span><b id="rho-val">0.30</b></span>
+          <input id="rho" type="range" min="0.08" max="0.40" step="0.01" value="0.30">
+        </label>
+        <div class="rho-picks" id="rho-picks"></div>
+        <div class="presets" id="presets"></div>
+
+        <div class="stats" id="stats"></div>
+        <div class="relax" id="relax"></div>
+      </form>
+    </div>
+
+    <footer>
+      <p>平面是俯视，北在上。热力是 4 m 板元打到街面 2 m 格子上的预览辐照，着色用简化晴空，不是 TMY，也不是 pvlib Ineichen。有害阈值 100 W/m² 来自假设集，不是新的法规限值。</p>
+      <p>反射公式 r = 2(n·s)n − s。照不到的板元不算失败。邻楼按盒子截获，对应全年 Gate 的「导离周边建筑」，不是把 30 分钟滞留重算一遍。</p>
+    </footer>
+  </div>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
