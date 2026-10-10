@@ -15,6 +15,7 @@ import {
   selectDrawn,
   drawBudget,
   waterReflectance,
+  pruneLowSunSky,
 } from "./js/optics.js";
 
 const north = toThree(0, 1, 0);
@@ -221,6 +222,51 @@ const streetDrawn = selectDrawn(fine.paths, "street", streetHero, true);
 assert.ok(streetDrawn.length >= 1);
 assert.ok(streetDrawn.every((path) => path.hops.some((hop) => hop.kind === "street")));
 assert.equal(streetDrawn.filter((path) => path.featured).length, 1);
+
+function skyStack(kind) {
+  const paths = [];
+  for (let i = 0; i < 8; i += 1) {
+    const z = 20 + i * 28;
+    paths.push({
+      origin: [0, 0, z],
+      energy: 0.4 - i * 0.01,
+      kind,
+      hops: kind === "sky"
+        ? [{ from: [0, 0, z], to: [12, -40, z + 28], kind: "sky" }]
+        : [
+          { from: [i * 24, 0, z], to: [i * 24 + 8, 6, z], kind: "neighbor" },
+          { from: [i * 24 + 8, 6, z], to: [i * 24 - 20, -10, z + 24], kind: "sky" },
+        ],
+    });
+  }
+  return paths;
+}
+
+const stacked = skyStack("sky");
+const stackedHero = stacked[3];
+const noon = selectDrawn(stacked, "reflect", stackedHero, true, { elevationDeg: 32 });
+const dawn = selectDrawn(stacked, "reflect", stackedHero, true, { elevationDeg: 4 });
+const dawnPhone = selectDrawn(stacked, "reflect", stackedHero, true, { elevationDeg: 4, mobile: true });
+const skyHops = (list) => list.flatMap((path) => path.hops.filter((hop) => hop.kind === "sky"));
+assert.ok(skyHops(noon).length >= 6, "a high sun still keeps a sky sample from each floor band");
+assert.ok(skyHops(dawn).length <= 3, "a low sun keeps the hero sky stroke plus two spaced auxiliaries");
+assert.ok(skyHops(dawn).length >= 2, "a low sun still shows more than the hero alone");
+assert.equal(dawn.filter((path) => path.featured).length, 1);
+const dawnZ = skyHops(dawn).map((hop) => hop.from[2]).sort((a, b) => a - b);
+for (let i = 1; i < dawnZ.length; i += 1) assert.ok(dawnZ[i] - dawnZ[i - 1] >= 36, "low-sun sky strokes stay apart in height");
+assert.ok(skyHops(dawnPhone).length <= 2, "a phone keeps an even thinner low-sun sky");
+assert.ok(skyHops(dawnPhone).some((hop) => hop.from[2] === stackedHero.hops[0].from[2]));
+
+const bounced = skyStack("neighbor");
+const bounceHero = bounced[2];
+const bounceDawn = selectDrawn(bounced, "reflect", bounceHero, true, { elevationDeg: 3.7 });
+assert.equal(bounceDawn.length, bounced.length > 8 ? 8 : bounced.length, "trimming a sky second hop keeps the neighbour stroke");
+assert.ok(bounceDawn.every((path) => path.hops[0].kind === "neighbor"));
+const bounceSky = skyHops(bounceDawn);
+assert.ok(bounceSky.length <= 3 && bounceSky.length >= 1, "neighbour-to-sky combs collapse to a few strokes");
+assert.ok(bounceDawn.some((path) => path.featured && path.hops.length === 2));
+const untouched = pruneLowSunSky(bounceDawn, {});
+assert.equal(untouched, bounceDawn, "omitting elevation leaves the draw alone");
 
 console.log("preset", preset.name, describePath(hero), fine.counts);
 console.log("optics ok");

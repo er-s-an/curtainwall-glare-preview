@@ -402,25 +402,64 @@ function buildWater(tile) {
   geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
   geometry.computeVertexNormals();
   view.waterMat = new THREE.MeshStandardMaterial({
-    color: 0x0e4c62,
-    roughness: 0.12,
-    metalness: 0.08,
+    color: 0x0c3e52,
+    roughness: 0.55,
+    metalness: 0.04,
     transparent: true,
-    opacity: 0.94,
+    opacity: 0.96,
+    fog: false,
   });
+  view.waterGlint = {
+    sunDir: new THREE.Vector3(0.15, 0.25, -0.2),
+    sunColor: new THREE.Color(0xffe0b0),
+    sunElev: { value: 30 },
+  };
+  view.waterMat.customProgramCacheKey = () => "harbour-glint-1";
   view.waterMat.onBeforeCompile = (shader) => {
-    shader.vertexShader = shader.vertexShader.replace(
-      "#include <beginnormal_vertex>",
-      `vec3 objectNormal = vec3(normal);
-      float east = position.x;
-      float north = -position.z;
-      float rippleX = 0.055 * sin(east * 0.07 + north * 0.02);
-      float rippleN = 0.055 * cos(north * 0.05 - east * 0.01);
-      objectNormal = normalize(vec3(rippleX, 1.0, -rippleN));
-      #ifdef USE_TANGENT
-        vec3 objectTangent = vec3(tangent.xyz);
-      #endif`,
-    );
+    shader.uniforms.uSunDir = { value: view.waterGlint.sunDir };
+    shader.uniforms.uSunColor = { value: view.waterGlint.sunColor };
+    shader.uniforms.uSunElev = view.waterGlint.sunElev;
+    shader.vertexShader = `varying vec3 vWaterWorld;\n${shader.vertexShader}`
+      .replace(
+        "#include <beginnormal_vertex>",
+        `vec3 objectNormal = vec3(normal);
+        float east = position.x;
+        float north = -position.z;
+        float rippleX = 0.08 * sin(east * 0.07 + north * 0.02);
+        float rippleN = 0.08 * cos(north * 0.05 - east * 0.01);
+        objectNormal = normalize(vec3(rippleX, 1.0, -rippleN));
+        #ifdef USE_TANGENT
+          vec3 objectTangent = vec3(tangent.xyz);
+        #endif`,
+      )
+      .replace(
+        "#include <project_vertex>",
+        `#include <project_vertex>
+        vWaterWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;`,
+      );
+    shader.fragmentShader = `varying vec3 vWaterWorld;\nuniform vec3 uSunDir;\nuniform vec3 uSunColor;\nuniform float uSunElev;\n${shader.fragmentShader}`
+      .replace(
+        "#include <opaque_fragment>",
+        `vec3 viewToCam = normalize(cameraPosition - vWaterWorld);
+        vec3 sunL = normalize(uSunDir);
+        float east = vWaterWorld.x;
+        float north = -vWaterWorld.z;
+        float rippleX = 0.2 * sin(east * 0.17 + north * 0.08);
+        float rippleZ = 0.2 * cos(north * 0.14 - east * 0.05);
+        vec3 waterN = normalize(vec3(rippleX, 1.0, rippleZ));
+        vec3 halfL = normalize(sunL + viewToCam);
+        float facing = max(dot(waterN, viewToCam), 0.0);
+        float fres = pow(1.0 - facing, 1.55);
+        float above = smoothstep(-0.4, 1.2, uSunElev);
+        float low = 1.0 - smoothstep(9.0, 34.0, uSunElev);
+        vec3 skyMirror = mix(vec3(0.62, 0.76, 0.84), uSunColor, low * 0.42);
+        outgoingLight = mix(outgoingLight, skyMirror, fres * mix(0.42, 0.7, low));
+        float spec = pow(max(dot(waterN, halfL), 0.0), mix(18.0, 56.0, clamp(uSunElev / 48.0, 0.0, 1.0)));
+        float lane = 0.7 + 0.3 * sin(east * 0.04 + north * 0.08);
+        float glint = spec * (0.25 + 0.75 * fres) * above * mix(0.2, 1.15, low) * lane;
+        outgoingLight += uSunColor * min(glint, 1.05);
+        #include <opaque_fragment>`,
+      );
   };
   const mesh = new THREE.Mesh(geometry, view.waterMat);
   mesh.receiveShadow = true;
@@ -735,12 +774,12 @@ function dropDraw(obj) {
 function hopStyle(kind, featured, distance) {
   const base = featured
     ? (kind === "incoming" ? 0.7 : kind === "water" ? 0.55 : 0.95)
-    : (kind === "water" ? 0.18 : kind === "sky" ? 0.22 : kind === "occlusion" ? 0.14 : kind === "incoming" ? 0.22 : 0.32);
+    : (kind === "water" ? 0.18 : kind === "sky" ? 0.3 : kind === "occlusion" ? 0.14 : kind === "incoming" ? 0.22 : 0.32);
   const width = base * Math.max(0.85, Math.min(2.1, distance / 220));
   let opacity = 0.84;
   if (featured) opacity = kind === "water" ? 0.72 : 0.96;
   else if (kind === "water") opacity = 0.34;
-  else if (kind === "sky") opacity = 0.4;
+  else if (kind === "sky") opacity = 0.58;
   else if (kind === "occlusion") opacity = 0.42;
   else if (kind === "incoming") opacity = 0.5;
   return { width, opacity, depthTest: !featured };
@@ -760,7 +799,10 @@ function paintPaths() {
     view.scene.add(marks);
     return;
   }
-  const drawn = selectDrawn(result.paths, state.mode, view.hero, state.showHop2, { mobile: view.quality.low });
+  const drawn = selectDrawn(result.paths, state.mode, view.hero, state.showHop2, {
+    mobile: view.quality.low,
+    elevationDeg: momentSun().pos.elevationDeg,
+  });
   view.drawnCount = drawn.length;
   const buckets = new Map();
   const pushSeg = (kind, a, b, featured) => {
@@ -797,7 +839,8 @@ function paintPaths() {
       pushSeg(hop.kind, a, end, featured);
     }
     const land = path.hops[path.hops.length - 1];
-    const discRadius = featured ? (land.kind === "street" || land.kind === "water" ? 5.4 : 3.3) : 1.15;
+    const skyAux = !featured && land.kind === "sky";
+    const discRadius = featured ? (land.kind === "street" || land.kind === "water" ? 5.4 : 3.3) : (skyAux ? 0.7 : 1.15);
     const disc = new THREE.Mesh(
       new THREE.CircleGeometry(discRadius, 14),
       new THREE.MeshBasicMaterial({
@@ -805,7 +848,7 @@ function paintPaths() {
         side: THREE.DoubleSide,
         depthTest: false,
         transparent: true,
-        opacity: featured ? 0.95 : 0.75,
+        opacity: featured ? 0.95 : (skyAux ? 0.42 : 0.75),
       }),
     );
     disc.position.copy(lift(land.to[0], land.to[1], land.to[2]));
@@ -926,6 +969,12 @@ function updateSun() {
     uniforms.sunDir.value.set(sx, sy, sz);
   }
   if (view.waterMat) view.waterMat.color.set(elev < 8 ? 0x1a4558 : elev < 20 ? 0x14566c : 0x0d4a60);
+  if (view.waterGlint) {
+    const [sx, sy, sz] = toThree(sun[0], sun[1], sun[2]);
+    view.waterGlint.sunDir.set(sx, sy, sz);
+    view.waterGlint.sunColor.set(look.sun);
+    view.waterGlint.sunElev.value = elev;
+  }
   if (view.sunOrb) {
     const orbAt = v3(focus[0] + sun[0] * 980, focus[1] + sun[1] * 980, focus[2] + Math.max(sun[2], 0.02) * 980);
     view.sunOrb.position.copy(orbAt);

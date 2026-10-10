@@ -623,10 +623,84 @@ export function selectDrawn(paths, mode, hero, showHop2, options = {}) {
     buckets[key].sort((a, b) => b.energy - a.energy);
     drawn.push(...buckets[key].slice(0, cap[key]));
   }
-  return drawn.map((path) => {
+  const mapped = drawn.map((path) => {
     const hops = !showHop2 && path.hops.length > 1 ? [path.hops[0]] : path.hops;
     return { ...path, hops, featured: path === hero };
   });
+  return pruneLowSunSky(mapped, options);
+}
+
+function hopDirection(hop) {
+  const dx = hop.to[0] - hop.from[0];
+  const dy = hop.to[1] - hop.from[1];
+  const dz = hop.to[2] - hop.from[2];
+  const len = Math.hypot(dx, dy, dz) || 1;
+  return [dx / len, dy / len, dz / len];
+}
+
+/**
+ * Below about 12° the same reflection direction leaves every floor, so sky
+ * strokes stack into one comb. Keep the hero stroke and a few auxiliaries
+ * spaced up the facade. Second hops to the sky are trimmed; the first hop stays.
+ * Callers that omit elevationDeg keep the previous draw.
+ */
+export function pruneLowSunSky(drawn, options = {}) {
+  const elev = options.elevationDeg;
+  if (typeof elev !== "number" || elev < 0 || elev >= 12) return drawn;
+  const mobile = options.mobile === true;
+  const gap = mobile ? 48 : 36;
+  const cap = mobile ? 1 : 2;
+  const families = [];
+  const strokes = [];
+  drawn.forEach((path, pathIndex) => {
+    path.hops.forEach((hop, hopIndex) => {
+      if (hop.kind !== "sky") return;
+      const dir = hopDirection(hop);
+      let family = families.findIndex((sample) => sample[0] * dir[0] + sample[1] * dir[1] + sample[2] * dir[2] > 0.985);
+      if (family < 0) {
+        family = families.length;
+        families.push(dir);
+      }
+      strokes.push({
+        pathIndex,
+        hopIndex,
+        featured: path.featured === true,
+        z: hop.from[2],
+        family,
+      });
+    });
+  });
+  const drop = new Set();
+  for (let family = 0; family < families.length; family += 1) {
+    const aux = strokes.filter((stroke) => stroke.family === family && !stroke.featured).sort((a, b) => a.z - b.z);
+    const keptZ = strokes.filter((stroke) => stroke.family === family && stroke.featured).map((stroke) => stroke.z);
+    const order = [];
+    for (let lo = 0, hi = aux.length - 1; lo <= hi; lo += 1, hi -= 1) {
+      order.push(aux[lo]);
+      if (hi !== lo) order.push(aux[hi]);
+    }
+    const kept = new Set();
+    let count = 0;
+    for (const stroke of order) {
+      if (count >= cap) break;
+      if (keptZ.some((z) => Math.abs(z - stroke.z) < gap)) continue;
+      kept.add(stroke);
+      keptZ.push(stroke.z);
+      count += 1;
+    }
+    for (const stroke of aux) {
+      if (!kept.has(stroke)) drop.add(`${stroke.pathIndex}:${stroke.hopIndex}`);
+    }
+  }
+  if (!drop.size) return drawn;
+  const next = [];
+  drawn.forEach((path, pathIndex) => {
+    if (drop.has(`${pathIndex}:0`)) return;
+    const hops = path.hops.filter((_, hopIndex) => !drop.has(`${pathIndex}:${hopIndex}`));
+    if (!hops.length) return;
+    next.push(hops.length === path.hops.length ? path : { ...path, hops });
+  });
+  return next;
 }
 
 export const KIND_LABEL = {
