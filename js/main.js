@@ -150,7 +150,7 @@ function buildCity(tile) {
     stone: { positions: [], uvs: [], roofs: [] },
   };
   for (const building of tile.buildings) {
-    const key = building.height >= 40 ? (building.source === "height" ? "measured" : "inferred") : "stone";
+    const key = building.height >= 40 ? ((building.source === "height" || building.source === "opendata" || building.source === "wikidata") ? "measured" : "inferred") : "stone";
     const bucket = buckets[key];
     for (const edge of building.edges) {
       addWall(bucket.positions, bucket.uvs, edge.ax, edge.ay, edge.bx, edge.by, building.minHeight || 0, building.height);
@@ -479,6 +479,12 @@ function writeHud(sun) {
   if (building) {
     const source = building.source === "height"
       ? "OSM 高度"
+      : building.source === "opendata"
+      ? "公开数据高度"
+      : building.source === "wikidata"
+      ? "Wikidata 高度"
+      : building.source === "default"
+      ? "默认推断高度"
       : `按 ${building.levels || "?"} 层 × 3.2 m 推断`;
     const face = subject.cluster.n[1] < -0.4 ? "朝南的一面" : "朝街的一面";
     $("building-meta").textContent = `${building.height.toFixed(0)} m · ${source} · 玻璃皮装在${face}，α 让每一层的法线抬起来。`;
@@ -498,7 +504,9 @@ function writeHud(sun) {
   $("counts").textContent = `板元 ${c.panels} · 照到 ${c.lit} · 背光 ${c.backlit} · 被挡住 ${c.shaded} · 一跳街 ${c.street} / 邻楼 ${c.neighbor} / 水 ${c.water} / 天 ${c.sky} · 二跳 ${c.hop2}（向天 ${c.hop2sky} · 向水 ${c.hop2water} · 向街 ${c.hop2street}）`;
   const counts = view.tile.meta.counts;
   const ratio = counts.rendered ? (100 * counts.heightTagged) / counts.rendered : 0;
-  $("ratio").textContent = `这片 ${counts.rendered} 栋里，${counts.heightTagged} 栋（${ratio.toFixed(0)}%）用 OSM 高度，${counts.levelsInferred} 栋按层数推断。缺高度的 ${counts.omittedNoHeight} 栋没有画，也不拿盒子冒充。`;
+  const openData = counts.openData || 0;
+  const defInf = counts.defaultInferred || 0;
+  $("ratio").textContent = `这片 ${counts.rendered} 栋：OSM高度 ${counts.heightTagged}，公开数据 ${openData}，层数推断 ${counts.levelsInferred}，默认推断 ${defInf}；缺高度未画 ${counts.omittedNoHeight}。`;
 }
 
 function bind() {

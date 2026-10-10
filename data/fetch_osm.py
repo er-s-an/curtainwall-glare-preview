@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
 """Pull a Central Hong Kong tile from OSM and write data/central.json.
 
-Heights:
-  - height / building:height, when present, are kept as tagged metres.
-  - Otherwise building:levels × LEVEL_M (3.2). That value is marked "levels".
-  - Footprints with neither tag are omitted. They are not given a fake height.
+Heights, in order (see height_fill.py):
+  - OSM height / building:height, kept as tagged metres.
+  - Wikidata P2048, then Lands Department top−base, then Microsoft footprints
+    when a tile exists.
+  - Floor count × LEVEL_M (3.2), from Wikidata, LandsD, or building:levels.
+  - A type-and-area prior capped at 48 m, marked inferred.
+
+Footprints are not dropped for a missing height. Google and Apple 3D tiles
+are not used.
 
 Coordinate frame written to JSON: local ENU metres, x east, y north, origin at
 the bbox centre. three.js conversion lives in js/optics.js (y-up: z = -north).
@@ -21,9 +26,10 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
+import height_fill
+
 SOUTH, WEST, NORTH, EAST = 22.281, 114.155, 22.287, 114.165
 LEVEL_M = 3.2
-UNKNOWN_OMITTED = True
 ENDPOINTS = [
     "https://lz4.overpass-api.de/api/interpreter",
     "https://overpass.openstreetmap.fr/api/interpreter",
@@ -217,12 +223,11 @@ def orient(ring, ccw):
 
 
 def height_of(tags):
+    """OSM metre tag only. Floor counts are applied later, after Wikidata and LandsD."""
     tagged = num_m(tags.get("height") or tags.get("building:height"))
     levels = num_levels(tags.get("building:levels"))
     if tagged is not None:
         return tagged, "height", levels
-    if levels is not None:
-        return round(levels * LEVEL_M, 2), "levels", levels
     return None, None, levels
 
 
@@ -477,7 +482,7 @@ out geom;
         return clean if len(clean) >= 3 else None
 
     buildings = []
-    omitted = 0
+    omitted_geom = 0
     roads = []
     shore_latlon = []
     water_polys = []
@@ -527,17 +532,14 @@ out geom;
         if "building" not in tags and "building:part" not in tags:
             continue
         height, source, levels = height_of(tags)
-        if height is None:
-            omitted += 1
-            continue
         outers, holes = element_rings(element)
         if not outers:
-            omitted += 1
+            omitted_geom += 1
             continue
         outer_ll = max(outers, key=lambda ring: abs(shoelace([(lon, lat) for lat, lon in ring])))
         outer = enu_ring(outer_ll)
         if not outer or abs(shoelace(outer)) < 20:
-            omitted += 1
+            omitted_geom += 1
             continue
         outer = orient(outer, True)
         hole_rings = []
@@ -546,18 +548,28 @@ out geom;
             if ring and abs(shoelace(ring)) > 12:
                 hole_rings.append(orient(ring, False))
         min_h = min_height_of(tags)
-        if min_h >= height - 0.5:
+        if height is not None and min_h >= height - 0.5:
             min_h = 0.0
         name_zh = tags.get("name:zh") or ""
         name = name_zh or tags.get("name") or ""
-        buildings.append({
+        name_en = tags.get("name:en") or ""
+        qid = tags.get("wikidata") or ""
+        if not re.fullmatch(r"Q\d+", qid):
+            qid = ""
+        clat = sum(point[0] for point in outer_ll) / len(outer_ll)
+        clon = sum(point[1] for point in outer_ll) / len(outer_ll)
+        record = {
             "id": f"{element['type']}/{element['id']}",
             "name": name,
-            "nameEn": tags.get("name:en") or "",
-            "height": round(height, 2),
+            "nameEn": name_en,
+            "height": None if height is None else round(height, 2),
             "minHeight": round(min_h, 2),
             "source": source,
             "levels": levels,
+            "measured": source == "height",
+            "heightMethod": "osm-height" if source == "height" else None,
+            "heightRef": "osm:height" if source == "height" else "",
+            "heightNote": "OSM 高度" if source == "height" else "",
             "part": "building:part" in tags and "building" not in tags,
             "kind": tags.get("building:part") if "building:part" in tags and "building" not in tags else tags.get("building") or "yes",
             "outer": outer,
@@ -565,7 +577,27 @@ out geom;
             "area": round(abs(shoelace(outer)), 1),
             "centroid": [round(v, 2) for v in centroid(outer)],
             "minFromPodium": False,
-        })
+            "_qid": qid,
+            "_lat": clat,
+            "_lon": clon,
+            "_osm_levels": levels,
+            "_keys": height_fill.name_keys(name, name_en, name_zh),
+        }
+        buildings.append(record)
+
+    fill_report = height_fill.fill_heights(
+        buildings,
+        south=SOUTH,
+        west=WEST,
+        north=NORTH,
+        east=EAST,
+        m_lat=m_lat,
+        m_lon=m_lon,
+        level_m=LEVEL_M,
+        project=enu,
+    )
+    unfilled = [item for item in buildings if not item.get("height")]
+    buildings = [item for item in buildings if item.get("height")]
 
     drop = set()
     parts = [item for item in buildings if item["part"]]
@@ -634,8 +666,14 @@ out geom;
         water_polys = basins
         print("blocker: coastline did not yield a harbour polygon that keeps Central dry")
 
-    measured = sum(1 for item in buildings if item["source"] == "height")
-    inferred = sum(1 for item in buildings if item["source"] == "levels")
+    def bucket(name):
+        return sum(1 for item in buildings if item.get("source") == name)
+
+    measured = bucket("height")
+    wikidata_n = bucket("wikidata")
+    opendata_n = bucket("opendata")
+    inferred = bucket("levels")
+    default_n = bucket("default")
     xs = [point[0] for item in buildings for point in item["outer"]]
     ys = [point[1] for item in buildings for point in item["outer"]]
     for ring in water_polys:
@@ -648,20 +686,27 @@ out geom;
         "mPerDegLon": round(m_lon, 4),
         "fetched": "2026-10-11",
         "endpoint": endpoint,
-        "license": "ODbL-1.0",
-        "attribution": "© OpenStreetMap contributors",
+        "license": "ODbL-1.0 + CC0-1.0 + CSDI Terms of Use",
+        "attribution": "© OpenStreetMap contributors; Wikidata (CC0); Lands Department Building dataset, HKSAR Government, via CSDI",
         "levelHeightM": LEVEL_M,
+        "defaultCapM": height_fill.DEFAULT_CAP_M,
         "harbourNorth": HARBOUR_NORTH,
         "waterSource": water_source,
+        "heightFill": fill_report,
         "counts": {
             "rendered": len(buildings),
             "heightTagged": measured,
+            "wikidata": wikidata_n,
+            "openData": opendata_n,
             "levelsInferred": inferred,
-            "omittedNoHeight": omitted,
+            "defaultInferred": default_n,
+            "omittedNoHeight": len(unfilled),
+            "omittedGeometry": omitted_geom,
             "droppedParent": len(drop),
             "roads": len(roads),
             "waterPolys": len(water_polys),
         },
+        "methods": {},
         "bounds": {
             "minX": round(min(xs), 2) if xs else 0,
             "maxX": round(max(xs), 2) if xs else 0,
@@ -669,6 +714,11 @@ out geom;
             "maxY": round(max(ys), 2) if ys else 0,
         },
     }
+    methods = {}
+    for item in buildings:
+        key = item.get("heightMethod") or "unknown"
+        methods[key] = methods.get(key, 0) + 1
+    meta["methods"] = methods
     # JSON doesn't allow non-list tuples; rings are already lists of pairs from orient of lists.
     def freeze_ring(ring):
         return [[point[0], point[1]] if not isinstance(point, list) else point for point in ring]
@@ -676,6 +726,8 @@ out geom;
     for item in buildings:
         item["outer"] = freeze_ring(item["outer"])
         item["holes"] = [freeze_ring(ring) for ring in item["holes"]]
+        for key in ("_qid", "_lat", "_lon", "_osm_levels", "_keys"):
+            item.pop(key, None)
     document = {
         "meta": meta,
         "buildings": buildings,
