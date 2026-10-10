@@ -136,10 +136,32 @@ select {
   min-height: 44px;
 }
 
+.modes button {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 1px;
+  line-height: 1.15;
+  min-height: 52px;
+  padding: 7px 8px;
+  border-radius: 14px;
+}
+
+.modes button small {
+  font-size: 0.72rem;
+  font-weight: 430;
+  color: var(--muted);
+}
+
 .modes button[aria-checked="true"] {
   background: var(--ink);
   color: #f4efe4;
   border-color: var(--ink);
+}
+
+.modes button[aria-checked="true"] small {
+  color: rgba(244, 239, 228, 0.78);
 }
 
 input[type="range"] {
@@ -181,6 +203,9 @@ input[type="range"] {
   border-radius: 99px;
   margin-right: 4px;
 }
+
+.swatch.measured { background: #8aa4b3; }
+.swatch.inferred { background: #d7a36a; }
 
 .history { margin: 8px 0; }
 

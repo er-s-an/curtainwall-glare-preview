@@ -1,5 +1,18 @@
 # 中环幕墙光路 · STATUS
 
+## priority
+
+- to: 小可
+- round: 1
+- state: shipped
+- date: 2026-10-11
+- model: grok-4.7
+- url: https://er-s-an.github.io/curtainwall-glare-preview/
+- local: http://127.0.0.1:8765/
+- asks: 材质/天空/海面、阴影、默认机位、楼块接缝；低太阳、遮挡、水面弱反射、多跳折线可读、手机 LOD；只看街 / 单纯看反射
+- held: 中环仍是 OSM/开放数据高度，不退回假盒子；主界面不判通过或无解；不编造铰链或认证
+- next: 第 2 轮可以把午后海面更多地放进默认机位，天空再深一点
+
 日期：2026-10-11。公网：https://er-s-an.github.io/curtainwall-glare-preview/
 
 ## 高度来源占比（渲染 370 栋，omittedNoHeight=0）
@@ -14,11 +27,19 @@
 | 几何无效省略 | 42 | — | 非缺高度 |
 | 父子合并丢掉 | 74 | — | part/parent |
 
-Microsoft Global ML Building Footprints：索引无港岛瓦片，未使用。未请求 Google/Apple 3D tiles。
+Microsoft Global ML Building Footprints：索引无港岛瓦片，未使用。未请求 Google/Apple 3D tiles。本轮没有重生成 `data/central.json`。
 
 许可：OSM ODbL；地政总署/CSDI 按门户条款；脚本见 `data/height_fill.py`、`data/fetch_osm.py`。
+
+## 这一轮
+
+- 玻璃/石材按层分格，楼块向内收并留屋顶压边和接缝线。远而矮、轮廓复杂的楼收成盒子并合并（桌面约 39 栋，手机约 50 栋）。120 m 以上仍用真实轮廓。
+- 天空随太阳高度变色，海面用和光学同一套微浪法线，直射有阴影。低太阳（约 3.7°，07:20）仍出折线，影子拉长。
+- 水面反射率用 Schlick，上限 0.12，画面上那一跳更细更淡。遮挡只在「单纯看反射」里画少数几段。
+- 折线按落点聚类后限条数。默认主折线：本楼 → 國際金融中心二期 → 水面。只看街只留落到路面的光，并重新取景。
+- 主界面没有通过 / 无解。倾角 16° 落到水面，40° 改落到天空。
 
 ## 功能
 
 - three.js orbit；多跳光路；「只看街 / 单纯看反射」
-- 非 SJG 专业评估软件
+- 非 SJG 专业评估软件。直射用晴空估算，不是 TMY。

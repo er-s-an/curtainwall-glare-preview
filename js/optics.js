@@ -246,6 +246,13 @@ export function waterNormal(x, y) {
   return [nx / len, ny / len, 1 / len];
 }
 
+/** Schlick fresnel for air-water, capped so the harbour bounce stays weak. */
+export function waterReflectance(nd) {
+  const c = Math.max(0, Math.min(1, nd));
+  const fresnel = 0.02 + 0.1 * (1 - c) ** 5;
+  return Math.min(0.12, fresnel);
+}
+
 export function firstHit(origin, dir, tile, skipId, tMin = T_MIN, tMax = 2000) {
   let best = null;
   const limit = () => (best ? best.t : tMax);
@@ -345,7 +352,8 @@ function facadeScore(building, cluster, tile) {
   if (hit && hit.wall && hit.t > 7 && hit.t < 48 && hit.building.height >= 24) neighbor = Math.min(hit.building.height, 180) / (hit.t + 8);
   const south = cluster.n[1] < -0.25 ? 1.35 : cluster.n[1] < 0.15 ? 1.05 : 0.75;
   const named = building.name ? 1.2 : 1;
-  const measured = building.source === "height" ? 1.25 : 0.8;
+  const recorded = building.measured === true || (building.measured == null && building.source === "height");
+  const measured = recorded ? 1.25 : 0.8;
   const tall = building.height >= 40 && building.height <= 430 ? 1 : 0.45;
   return {
     score: cluster.length * (0.35 + neighbor) * south * named * measured * tall,
@@ -369,13 +377,17 @@ export function rankSubjects(tile, limit = 8) {
   }
   ranked.sort((a, b) => b.score - a.score);
   const named = ranked.filter((row) => row.building.name);
-  const famous = named.filter((row) => row.building.height >= 160);
+  const canyon = named.slice(0, Math.max(4, limit - 4));
+  const skyline = named
+    .filter((row) => row.building.height >= 180)
+    .sort((a, b) => b.building.height - a.building.height || b.score - a.score);
   const merged = [];
-  for (const row of [...named.slice(0, 6), ...famous]) {
-    if (!merged.some((item) => item.building.id === row.building.id)) merged.push(row);
+  for (const row of [...canyon, ...skyline, ...named]) {
+    if (merged.some((item) => item.building.id === row.building.id)) continue;
+    merged.push(row);
+    if (merged.length >= limit) break;
   }
-  const pool = merged.length >= 3 ? merged : ranked;
-  return pool.slice(0, limit);
+  return (merged.length >= 3 ? merged : ranked).slice(0, limit);
 }
 
 export function buildPanels(building, cluster, alphaDeg, stepH = 12, stepV = 15) {
@@ -432,6 +444,12 @@ function skyPoint(origin, dir, span) {
   return add(origin, dir, span);
 }
 
+/** Nearly horizontal sky rays need a longer visible run; steep ones stay short. */
+function skySpan(dir) {
+  const up = Math.max(dir[2], 0.02);
+  return Math.min(260, Math.max(64, 16 / up));
+}
+
 export function traceTile(tile, options) {
   const { building, facade, alpha, sun, dni, rho } = options;
   const panels = buildPanels(building, facade, alpha, options.stepH || 12, options.stepV || 15);
@@ -455,6 +473,7 @@ export function traceTile(tile, options) {
     hop2neighbor: 0,
   };
   const paths = [];
+  const occlusions = [];
   for (const panel of panels) {
     const normal = tiltNormal(facade.n, alpha);
     const { nd, r } = reflect(normal, sun);
@@ -465,22 +484,31 @@ export function traceTile(tile, options) {
     const shade = firstHit(panel.origin, sun, tile, building.id, 0.6, 5000);
     if (shade) {
       counts.shaded += 1;
+      if (occlusions.length < 6 && counts.shaded % 3 === 1) {
+        occlusions.push({
+          from: panel.origin.slice(),
+          to: shade.point.slice(),
+          kind: shade.kind,
+        });
+      }
       continue;
     }
     counts.lit += 1;
     const hit = firstHit(panel.origin, r, tile, building.id, 0.35, 1600);
     let kind = "sky";
-    let end = skyPoint(panel.origin, r, 100);
+    let end = skyPoint(panel.origin, r, skySpan(r));
     let hop2 = null;
     let neighborId = "";
     let neighborName = "";
+    let waterRho = 1;
     if (!hit) {
       kind = r[2] > 0.02 ? "sky" : "ground";
-      if (kind === "ground" && r[2] < -1e-4) {
+      if (kind === "sky") end = skyPoint(panel.origin, r, skySpan(r));
+      else if (r[2] < -1e-4) {
         const t = (0.02 - panel.origin[2]) / r[2];
         end = t > 0 ? add(panel.origin, r, t) : skyPoint(panel.origin, r, 60);
         kind = "ground";
-      }
+      } else end = skyPoint(panel.origin, r, 48);
     } else {
       kind = hit.kind;
       end = hit.point;
@@ -491,13 +519,14 @@ export function traceTile(tile, options) {
       if (hit.wall || hit.kind === "water") {
         const bounced = bounce(hit, r);
         if (bounced) {
+          if (hit.kind === "water") waterRho = waterReflectance(bounced.nd);
           const origin2 = add(hit.point, bounced.normal, 0.3);
           const hit2 = firstHit(origin2, bounced.r, tile, hit.building ? hit.building.id : null, 0.2, 1600);
           let kind2;
           let end2;
           if (!hit2) {
             kind2 = bounced.r[2] > 0.02 ? "sky" : "ground";
-            if (kind2 === "sky") end2 = skyPoint(origin2, bounced.r, 130);
+            if (kind2 === "sky") end2 = skyPoint(origin2, bounced.r, skySpan(bounced.r));
             else if (bounced.r[2] < -1e-4) end2 = add(origin2, bounced.r, (0.02 - origin2[2]) / bounced.r[2]);
             else end2 = skyPoint(origin2, bounced.r, 40);
           } else {
@@ -512,7 +541,7 @@ export function traceTile(tile, options) {
       }
     }
     counts[kind] += 1;
-    const rho2 = hop2 ? (kind === "water" ? 0.08 : rho) : 1;
+    const rho2 = hop2 ? (kind === "water" ? waterRho : rho) : 1;
     const energy = Math.max(0, (dni / 1000) * nd * rho * rho2);
     paths.push({
       origin: panel.origin,
@@ -524,7 +553,12 @@ export function traceTile(tile, options) {
       normal,
     });
   }
-  return { paths, counts, panels: panels.length };
+  return { paths, counts, panels: panels.length, occlusions };
+}
+
+export function drawBudget(mobile = false) {
+  if (mobile) return { street: 8, neighbor: 6, water: 4, sky: 5, ground: 2, roof: 2 };
+  return { street: 12, neighbor: 8, water: 5, sky: 6, ground: 3, roof: 2 };
 }
 
 const HERO_ORDER = ["sky", "water", "street", "ground", "neighbor", "roof"];
@@ -561,25 +595,37 @@ export function pickHero(paths, mode = "reflect") {
   return singles[0] || null;
 }
 
-export function selectDrawn(paths, mode, hero, showHop2) {
+export function selectDrawn(paths, mode, hero, showHop2, options = {}) {
+  const mobile = options.mobile === true;
+  const cap = drawBudget(mobile);
+  const cell = mobile ? 26 : 18;
   let list = mode === "street" ? paths.filter(reachesStreet) : paths.slice();
   if (!showHop2) list = list.filter((path) => path.hops[0] && (mode !== "street" || path.hops[0].kind === "street"));
-  const buckets = { street: [], neighbor: [], water: [], sky: [], ground: [], roof: [] };
+  const best = new Map();
   for (const path of list) {
     if (hero && path === hero) continue;
+    const key = cap[path.kind] ? path.kind : "ground";
+    const p = path.hops[0].to;
+    const hop2 = path.hops[1] ? path.hops[1].kind : "-";
+    const id = `${key}:${Math.round(p[0] / cell)}:${Math.round(p[1] / cell)}:${Math.round(p[2] / 22)}:${hop2}`;
+    const prev = best.get(id);
+    if (!prev || path.energy > prev.energy) best.set(id, path);
+  }
+  const buckets = {};
+  for (const key of Object.keys(cap)) buckets[key] = [];
+  for (const path of best.values()) {
     const key = buckets[path.kind] ? path.kind : "ground";
     buckets[key].push(path);
   }
   const drawn = [];
   if (hero && list.includes(hero)) drawn.push(hero);
-  const cap = { street: 26, neighbor: 20, water: 12, sky: 16, ground: 8, roof: 6 };
   for (const key of Object.keys(cap)) {
     buckets[key].sort((a, b) => b.energy - a.energy);
     drawn.push(...buckets[key].slice(0, cap[key]));
   }
   return drawn.map((path) => {
-    if (showHop2 || path.hops.length < 2) return path;
-    return { ...path, hops: [path.hops[0]] };
+    const hops = !showHop2 && path.hops.length > 1 ? [path.hops[0]] : path.hops;
+    return { ...path, hops, featured: path === hero };
   });
 }
 

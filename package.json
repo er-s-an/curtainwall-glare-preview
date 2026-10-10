@@ -1,5 +1,8 @@
 {
   "name": "curtainwall-glare-preview",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "scripts": {
+    "test": "node test_preview.mjs && node test_optics.mjs"
+  }
 }

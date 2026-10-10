@@ -12,6 +12,9 @@ import {
   traceTile,
   pickHero,
   describePath,
+  selectDrawn,
+  drawBudget,
+  waterReflectance,
 } from "./js/optics.js";
 
 const north = toThree(0, 1, 0);
@@ -142,5 +145,82 @@ const hero = pickHero(fine.paths, "reflect");
 assert.equal(hero.hops.length, 2);
 assert.equal(hero.hops[0].kind, "neighbor");
 assert.ok(hero.hops[1].kind === "sky" || hero.hops[1].kind === "water");
+console.log("preset", preset.name, describePath(hero), fine.counts);
+
+assert.ok(waterReflectance(0.95) < 0.04, "head-on water bounce stays very weak");
+assert.ok(waterReflectance(0.12) > waterReflectance(0.95), "grazing water is a bit stronger");
+assert.ok(waterReflectance(0.02) <= 0.12);
+
+const northFacade = facadeClusters(subject).find((cluster) => cluster.n[1] > 0.8);
+const overWater = traceTile(square, {
+  building: subject,
+  facade: northFacade,
+  alpha: 8,
+  sun: sunVector(26, 8),
+  dni: 800,
+  rho: 0.3,
+  stepH: 8,
+  stepV: 12,
+});
+const waterHops = overWater.paths.filter((path) => path.kind === "water" && path.hops.length > 1);
+assert.ok(waterHops.length > 0, "north glass can bounce off the harbour");
+assert.ok(waterHops.every((path) => path.energy < 0.04), "water second hop stays faint");
+
+const lowSun = sunVector(16, 220);
+const blocked = traceTile(square, {
+  building: subject,
+  facade: southFacade,
+  alpha: 0,
+  sun: lowSun,
+  dni: 500,
+  rho: 0.3,
+  stepH: 8,
+  stepV: 12,
+});
+assert.ok(blocked.counts.shaded > 0, "a southern neighbor blocks a low southern sun");
+assert.ok(blocked.occlusions.length > 0 && blocked.occlusions.length <= 6);
+
+const openTile = prepareTile({
+  meta: {},
+  roads: [],
+  water: [],
+  buildings: [{
+    id: "subject",
+    name: "本楼",
+    height: 70,
+    minHeight: 0,
+    source: "height",
+    outer: [[-12, 0], [-12, 22], [12, 22], [12, 0]],
+    holes: [],
+  }],
+});
+const openSubject = openTile.buildings[0];
+const openSouth = facadeClusters(openSubject).find((cluster) => cluster.n[1] < -0.8);
+const open = traceTile(openTile, {
+  building: openSubject,
+  facade: openSouth,
+  alpha: 0,
+  sun: lowSun,
+  dni: 500,
+  rho: 0.3,
+  stepH: 8,
+  stepV: 12,
+});
+assert.equal(open.counts.shaded, 0, "without the neighbor the same sun reaches the glass");
+assert.ok(open.counts.lit > 0, "low sun still draws a reflection when the facade faces it");
+
+const drawn = selectDrawn(fine.paths, "reflect", hero, true);
+const phone = selectDrawn(fine.paths, "reflect", hero, true, { mobile: true });
+const budget = drawBudget(false);
+const cap = Object.values(budget).reduce((sum, n) => sum + n, 1);
+assert.ok(drawn.some((path) => path.featured && path.hops.length === 2));
+assert.ok(drawn.length <= cap);
+assert.ok(phone.length <= drawn.length);
+const streetHero = pickHero(fine.paths, "street");
+const streetDrawn = selectDrawn(fine.paths, "street", streetHero, true);
+assert.ok(streetDrawn.length >= 1);
+assert.ok(streetDrawn.every((path) => path.hops.some((hop) => hop.kind === "street")));
+assert.equal(streetDrawn.filter((path) => path.featured).length, 1);
+
 console.log("preset", preset.name, describePath(hero), fine.counts);
 console.log("optics ok");

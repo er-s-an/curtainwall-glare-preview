@@ -37,8 +37,14 @@
       <p class="meta" id="building-meta"></p>
 
       <div class="modes" role="radiogroup" aria-label="光路显示">
-        <button type="button" role="radio" id="mode-street" aria-checked="false">只看街</button>
-        <button type="button" role="radio" id="mode-reflect" aria-checked="true">单纯看反射</button>
+        <button type="button" role="radio" id="mode-street" aria-checked="false">
+          <span>只看街</span>
+          <small>只留落到路面的光</small>
+        </button>
+        <button type="button" role="radio" id="mode-reflect" aria-checked="true">
+          <span>单纯看反射</span>
+          <small>整段折线，不判成败</small>
+        </button>
       </div>
       <p class="fine" id="mode-hint"></p>
 
@@ -60,14 +66,18 @@
       </label>
 
       <div class="checks">
-        <label><input id="hop2" type="checkbox" checked> 二跳</label>
-        <label><input id="incoming" type="checkbox" checked> 入射</label>
+        <label><input id="hop2" type="checkbox" checked> 二跳折线</label>
+        <label><input id="incoming" type="checkbox" checked> 太阳入射</label>
         <button type="button" id="frame" class="textish">对准这条光路</button>
       </div>
 
       <p class="sunline" id="sun-readout"></p>
       <p class="counts" id="counts"></p>
 
+      <ul class="legend" aria-label="建筑高度">
+        <li><i class="swatch measured"></i>记录高度</li>
+        <li><i class="swatch inferred"></i>高度推断</li>
+      </ul>
       <ul class="legend">
         <li><i style="background:#f0c14b"></i>入射</li>
         <li><i style="background:#e25a12"></i>落到街</li>
@@ -75,7 +85,7 @@
         <li><i style="background:#1f8f86"></i>天空</li>
         <li><i style="background:#2f6fbe"></i>水面</li>
       </ul>
-      <p class="fine">冷色：OSM / 公开数据 / Wikidata 高度。暖色：层数或默认推断（标「高度推断」）。缺高度已尽量补全，omittedNoHeight 目标为 0。</p>
+      <p class="fine">冷色是记录到的高度：OSM 的 height、维基数据的高度，或地政总署屋顶减基底。暖色是高度推断：层数 × 3.2 米，或按类型和占地给的默认层数（上限 48 米）。推断不当作实测。缺高度的楼也会画上。</p>
       <p class="ratio" id="ratio"></p>
 
       <details class="history">
@@ -83,8 +93,8 @@
         <p>早前对另外几组参数化楼跑过全年扫描。那些数字不在这页上改，这页的中环光路也不拿来下全年结论。</p>
       </details>
     </form>
-    <p class="legal">几何预览，不是 SJG 188 专业评估，也不是结构验算。反射 r = 2(n·s)n − s。建筑 © OpenStreetMap 贡献者，ODbL。</p>
+    <p class="legal">几何预览，不是 SJG 188 专业评估，也不是结构验算。反射 r = 2(n·s)n − s。轮廓 © OpenStreetMap 贡献者（ODbL）。部分高度来自维基数据（CC0）和地政总署建筑物数据集（CSDI，须注明香港特区政府）。微软足迹在这片没有瓦片，未使用。没有使用 Google 或 Apple 三维瓦片。</p>
   </aside>
-  <script type="module" src="js/main.js"></script>
+  <script type="module" src="js/main.js?v=20261011-4"></script>
 </body>
 </html>
