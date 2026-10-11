@@ -628,7 +628,7 @@ export function selectDrawn(paths, mode, hero, showHop2, options = {}) {
     const hops = !showHop2 && path.hops.length > 1 ? [path.hops[0]] : path.hops;
     return { ...path, hops, featured: path === hero };
   });
-  return pruneMallRoof(pruneMallScatter(pruneIfc2Column(pruneLowSunNeighbor(pruneLowSunSky(mapped, options), options), options), options), options);
+  return pruneMallRoof(pruneMallScatter(pruneIfc2GlassKink(pruneIfc2Column(pruneLowSunNeighbor(pruneLowSunSky(mapped, options), options), options)), options), options);
 }
 
 function hopDirection(hop) {
@@ -778,6 +778,28 @@ export function pruneIfc2Column(drawn, options = {}) {
       if (!kept.has(stroke)) drop.add(`${stroke.pathIndex}:${stroke.hopIndex}`);
     }
   }
+  return withoutHops(drawn, drop);
+}
+
+/**
+ * The afternoon auxiliary onto 國際金融中心二期 can bounce into a roof
+ * fold about a metre off the glass. That kink is not a hop. A landing
+ * that reaches another roof stays, and so does the harbour polyline.
+ * Mall strokes are another name. The kept hop is not shortened.
+ * Runs at any sun height.
+ */
+export function pruneIfc2GlassKink(drawn) {
+  const drop = new Set();
+  drawn.forEach((path, pathIndex) => {
+    if (path.featured) return;
+    const name = path.neighborName || "";
+    if (!name.includes("二期") || !path.hops || path.hops.length < 2) return;
+    const hop = path.hops[0];
+    const next = path.hops[1];
+    if (!hop || hop.kind !== "neighbor" || !next || next.kind !== "roof") return;
+    if (dist(next.from, next.to) >= 4) return;
+    drop.add(`${pathIndex}:1`);
+  });
   return withoutHops(drawn, drop);
 }
 

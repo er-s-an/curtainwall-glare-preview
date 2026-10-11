@@ -10,7 +10,7 @@ import {
   selectDrawn,
   describePath,
   tiltedPoint,
-} from "./optics.js?v=20261011-r7";
+} from "./optics.js?v=20261011-r8";
 
 const $ = (id) => document.getElementById(id);
 const state = {
@@ -841,6 +841,7 @@ function paintPaths() {
     mobile: view.quality.low,
     elevationDeg: momentSun().pos.elevationDeg,
   });
+  view.drawn = drawn;
   view.drawnCount = drawn.length;
   view.strokeCounts = {};
   for (const path of drawn) {
@@ -1100,6 +1101,16 @@ function retrace() {
     heroHops: view.hero ? view.hero.hops.length : 0,
     drawn: view.drawnCount,
     strokes: view.strokeCounts || {},
+    paths: (view.drawn || []).map((path) => ({
+      featured: path.featured === true,
+      name: path.neighborName || "",
+      hops: path.hops.map((hop) => {
+        const dx = hop.to[0] - hop.from[0];
+        const dy = hop.to[1] - hop.from[1];
+        const dz = hop.to[2] - hop.from[2];
+        return { kind: hop.kind, len: Math.round(Math.hypot(dx, dy, dz) * 10) / 10 };
+      }),
+    })),
     occlusions: (view.result.occlusions || []).length,
     coarse: view.city ? view.city.userData.coarse : 0,
     quality: view.quality.low ? "low" : "high",

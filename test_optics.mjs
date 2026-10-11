@@ -18,6 +18,7 @@ import {
   pruneLowSunSky,
   pruneLowSunNeighbor,
   pruneIfc2Column,
+  pruneIfc2GlassKink,
   pruneMallScatter,
   pruneMallRoof,
 } from "./js/optics.js";
@@ -478,6 +479,103 @@ assert.ok(roofSpread(deskRoof) > 20, "another mall roof landing exists and is no
 assert.equal(presetIfc(presetDrawn).length, 2, "collapsing the mall roof leaves the 二期 pair");
 assert.equal(presetHero.hops[1].kind, "water");
 assert.equal(deskMall.length, 1, "collapsing the mall roof does not spread the pink mall stroke");
+
+function hopLen(hop) {
+  return Math.hypot(hop.to[0] - hop.from[0], hop.to[1] - hop.from[1], hop.to[2] - hop.from[2]);
+}
+const glassKink = {
+  energy: 0.02,
+  kind: "neighbor",
+  neighborName: "國際金融中心二期",
+  hops: [
+    { from: [0, 0, 102.8], to: [-104, 149, 30.4], kind: "neighbor" },
+    { from: [-104, 149, 30.4], to: [-104.7, 150.1, 30], kind: "roof" },
+  ],
+};
+const otherRoof = {
+  energy: 0.02,
+  kind: "neighbor",
+  neighborName: "國際金融中心二期",
+  hops: [
+    { from: [0, 0, 117.7], to: [-104.8, 143.9, 42], kind: "neighbor" },
+    { from: [-104.8, 143.9, 42], to: [-123.1, 170.9, 30], kind: "roof" },
+  ],
+};
+const harbourLine = {
+  featured: true,
+  energy: 0.05,
+  kind: "neighbor",
+  neighborName: "國際金融中心二期",
+  hops: [
+    { from: [0, 0, 207.8], to: [-104.9, 143.6, 132.1], kind: "neighbor" },
+    { from: [-104.9, 143.6, 132.1], to: [-303.2, 439.9, 0.1], kind: "water" },
+  ],
+};
+const kinkTrimmed = pruneIfc2GlassKink([glassKink, otherRoof, harbourLine, fan[1], roofPair[1]]);
+assert.equal(kinkTrimmed[0].hops.length, 1, "a roof fold about a metre off the glass is not a hop");
+assert.deepEqual(kinkTrimmed[0].hops[0].to, glassKink.hops[0].to, "the pink stroke is not shortened");
+assert.deepEqual(kinkTrimmed[0].hops[0].from, glassKink.hops[0].from);
+assert.equal(kinkTrimmed[1].hops.length, 2, "a second hop that reaches another roof stays");
+assert.deepEqual(kinkTrimmed[1].hops[1].to, otherRoof.hops[1].to, "the other roof landing is not shortened");
+assert.equal(kinkTrimmed[2].hops[1].kind, "water");
+assert.deepEqual(kinkTrimmed[2].hops[1].to, harbourLine.hops[1].to, "the harbour polyline stays whole");
+assert.equal(kinkTrimmed[3].hops.length, 2, "a mall pink stroke is not an IFC2 kink");
+assert.equal(kinkTrimmed[4].hops.length, 1, "the remaining mall roof stroke is not split");
+assert.deepEqual(kinkTrimmed[4].hops[0].to, roofPair[1].hops[0].to);
+const featuredKink = pruneIfc2GlassKink([{ ...glassKink, featured: true }]);
+assert.equal(featuredKink[0].hops.length, 2, "the featured polyline is not the fold this pass removes");
+
+const deskAux = presetIfc(presetDrawn).find((path) => !path.featured);
+assert.ok(deskAux);
+assert.equal(deskAux.hops.length, 1, "the real 15:00 desktop auxiliary loses the glass-hugging roof fold");
+assert.equal(deskAux.hops[0].kind, "neighbor");
+const rawAux = fine.paths.find((path) => path.hops[0]
+  && path.hops[0].kind === "neighbor"
+  && path.hops[0].from[2] === deskAux.hops[0].from[2]
+  && path.hops[0].to[0] === deskAux.hops[0].to[0]
+  && path.hops[1]
+  && path.hops[1].kind === "roof"
+  && hopLen(path.hops[1]) < 4);
+assert.ok(rawAux, "the dropped fold is the traced one-metre roof kink");
+assert.ok(hopLen(rawAux.hops[1]) < 2);
+assert.deepEqual(deskAux.hops[0].to, rawAux.hops[0].to, "the auxiliary pink stroke is not shortened");
+assert.deepEqual(deskAux.hops[0].from, rawAux.hops[0].from);
+const phoneAux = presetIfc(presetPhone).find((path) => !path.featured);
+assert.ok(phoneAux && phoneAux.hops[1] && phoneAux.hops[1].kind === "roof");
+assert.ok(hopLen(phoneAux.hops[1]) > 20, "the phone auxiliary's other roof landing stays");
+assert.deepEqual(phoneAux.hops[1].to, fine.paths.find((path) => path.hops[0] && path.hops[0].from[2] === phoneAux.hops[0].from[2] && path.hops[1] && path.hops[1].to[0] === phoneAux.hops[1].to[0]).hops[1].to);
+assert.equal(deskMall.length, 1, "dropping the glass kink does not spread the pink mall stroke");
+assert.equal(deskRoof.length, 1, "dropping the glass kink does not split the mall roof stroke");
+assert.equal(phoneMall.length, 1);
+assert.equal(phoneRoof.length, 1);
+assert.deepEqual(phoneRoof[0].hops[0].to, deskRoof[0].hops[0].to);
+assert.deepEqual(phoneMall[0].hops[0].to, deskMall[0].hops[0].to);
+
+const phoneTrace = traceTile(central, {
+  building: chosen.building,
+  facade: chosen.cluster,
+  alpha: preset.alpha,
+  sun: sunVector(pos.elevationDeg, pos.azimuthDeg),
+  dni: 700,
+  rho: 0.3,
+  stepH: 14,
+  stepV: 18,
+});
+const phoneHero = pickHero(phoneTrace.paths, "reflect");
+const phoneDrawn = selectDrawn(phoneTrace.paths, "reflect", phoneHero, true, { mobile: true, elevationDeg: pos.elevationDeg });
+const phoneIfc = presetIfc(phoneDrawn);
+assert.equal(phoneIfc.length, 2, "the phone still keeps the IFC2 hero plus one auxiliary");
+const phoneLiveHero = phoneIfc.find((path) => path.featured);
+const phoneLiveAux = phoneIfc.find((path) => !path.featured);
+assert.equal(phoneLiveHero.hops[1].kind, "water", "the phone harbour hop stays");
+assert.equal(phoneLiveHero.hops.length, 2);
+assert.ok(phoneLiveAux.hops[1] && phoneLiveAux.hops[1].kind === "roof" && hopLen(phoneLiveAux.hops[1]) > 4, "the phone auxiliary still lands on the other roof");
+assert.ok(hopLen(phoneLiveAux.hops[1]) < 20);
+const phoneMallLive = mallPink(phoneDrawn);
+const phoneRoofLive = mallRoofPaths(phoneDrawn);
+assert.equal(phoneMallLive.length, 1, "the phone mall pink stroke stays one line");
+assert.equal(phoneRoofLive.length, 1, "the phone mall roof stroke stays one line");
+assert.equal(phoneRoofLive[0].hops.length, 1);
 
 console.log("preset", preset.name, describePath(hero), fine.counts);
 console.log("ifc2", presetIfc(presetDrawn).length, "phone", presetIfc(presetPhone).length);
