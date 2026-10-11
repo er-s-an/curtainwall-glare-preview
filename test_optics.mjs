@@ -18,6 +18,7 @@ import {
   pruneLowSunSky,
   pruneLowSunNeighbor,
   pruneIfc2Column,
+  pruneMallScatter,
 } from "./js/optics.js";
 
 const north = toThree(0, 1, 0);
@@ -332,7 +333,54 @@ const mallHero = pickHero(mallPaths, "reflect");
 const mallTagged = mallPaths.map((path) => ({ ...path, featured: path === mallHero }));
 assert.equal(pruneIfc2Column(mallTagged, { elevationDeg: 30.2 }).length, mallTagged.length, "other towers keep their afternoon strokes");
 const mallDrawn = selectDrawn(mallPaths, "reflect", mallHero, true, { elevationDeg: 30.2 });
-assert.ok(mallDrawn.some((path) => path.featured && path.hops[1].kind === "water"));
+const mallKept = mallDrawn.find((path) => path.featured);
+assert.ok(mallKept && mallKept.hops.length === 2 && mallKept.hops[1].kind === "water");
+assert.deepEqual(mallKept.hops[0].to, mallHero.hops[0].to, "the mall hero stroke is not shortened");
+assert.deepEqual(mallKept.hops[1].to, mallHero.hops[1].to, "the mall hero's second hop is not shortened");
+assert.ok(mallDrawn.length <= 2, "a mall column keeps the hero plus one spaced auxiliary");
+
+function mallFan() {
+  const specs = [
+    { z: 73, land: [-149, 133, 14], hop2: { to: [-150, 135, 14], kind: "neighbor" } },
+    { z: 58, land: [-154, 138, 4], hop2: { to: [-152, 126, 0], kind: "ground" } },
+    { z: 28, land: [-289, 107, 26], hop2: { to: [-284, 84, 17], kind: "neighbor" } },
+  ];
+  return specs.map((spec) => ({
+    origin: [0, 0, spec.z],
+    energy: 0.018,
+    kind: "neighbor",
+    neighborName: "國際金融中心商場",
+    featured: false,
+    hops: [
+      { from: [0, 0, spec.z], to: spec.land, kind: "neighbor" },
+      { from: spec.land, to: spec.hop2.to, kind: spec.hop2.kind },
+    ],
+  }));
+}
+
+const fan = mallFan();
+const gathered = pruneMallScatter(fan, { elevationDeg: 30.2 });
+assert.equal(gathered.length, 1, "scattered mall wings gather to one polyline");
+assert.equal(gathered[0].hops[1].kind, "ground", "the kept mall stroke is the one with a real landing");
+assert.deepEqual(gathered[0].hops[0].to, fan[1].hops[0].to, "the kept mall stroke is not shortened");
+assert.deepEqual(gathered[0].hops[1].to, fan[1].hops[1].to);
+const sameWing = pruneMallScatter(fan.slice(0, 2), { elevationDeg: 30.2 });
+assert.equal(sameWing.length, 2, "two mall strokes on one wing stay");
+const twoWings = pruneMallScatter([fan[1], fan[2]], { elevationDeg: 30.2 });
+assert.equal(twoWings.length, 1);
+assert.equal(twoWings[0].hops[1].kind, "ground");
+const featuredFar = fan.map((path, index) => ({ ...path, featured: index === 2 }));
+const farKept = pruneMallScatter(featuredFar, { elevationDeg: 30.2 });
+const farHero = farKept.find((path) => path.featured);
+assert.ok(farHero && farHero.hops.length === 2, "a featured mall polyline stays whole");
+assert.deepEqual(farHero.hops[1].to, fan[2].hops[1].to);
+assert.equal(pruneMallScatter(mallTagged, { elevationDeg: 30.2 }).find((path) => path.featured).hops.length, 2);
+const stubOnly = pruneMallScatter([fan[0]], { mobile: true });
+assert.equal(stubOnly.length, 1);
+assert.equal(stubOnly[0].hops.length, 1, "a few-metre re-hit on the podium is not drawn as a hop");
+assert.deepEqual(stubOnly[0].hops[0].to, fan[0].hops[0].to);
+const ifcTagged = ifcPaths.map((path) => ({ ...path, featured: path === ifcHero }));
+assert.equal(pruneMallScatter(ifcTagged, { elevationDeg: 30.2 }).length, ifcTagged.length, "二期 strokes are not mall strokes");
 
 const presetDrawn = selectDrawn(fine.paths, "reflect", hero, true, { elevationDeg: pos.elevationDeg });
 const presetPhone = selectDrawn(fine.paths, "reflect", hero, true, { mobile: true, elevationDeg: pos.elevationDeg });
@@ -349,6 +397,28 @@ assert.ok(presetZ[1] - presetZ[0] >= 48);
 const afternoonStreet = selectDrawn(fine.paths, "street", streetHero, true, { elevationDeg: pos.elevationDeg });
 assert.ok(afternoonStreet.some((path) => path.featured && path.hops.some((hop) => hop.kind === "street")));
 assert.ok(afternoonStreet.filter((path) => (path.neighborName || "").includes("二期")).length >= 1);
+const mallPink = (list) => list.filter((path) => (path.neighborName || "").includes("商場") && path.hops[0] && path.hops[0].kind === "neighbor");
+const deskMall = mallPink(presetDrawn);
+const phoneMall = mallPink(presetPhone);
+assert.equal(deskMall.length, 1, "the real 15:00 mall fan gathers to one pink stroke");
+assert.equal(phoneMall.length, 1, "the phone keeps that same mall stroke");
+assert.equal(deskMall[0].hops[1].kind, "ground");
+assert.deepEqual(phoneMall[0].hops[0].to, deskMall[0].hops[0].to);
+assert.deepEqual(phoneMall[0].hops[1].to, deskMall[0].hops[1].to);
+const rawMall = fine.paths.find((path) => path.hops[0] && path.hops[0].to[0] === deskMall[0].hops[0].to[0] && path.hops[0].to[1] === deskMall[0].hops[0].to[1] && path.hops[0].from[2] === deskMall[0].hops[0].from[2]);
+assert.ok(rawMall);
+assert.deepEqual(deskMall[0].hops[0].to, rawMall.hops[0].to, "the mall pink stroke is not shortened");
+assert.deepEqual(deskMall[0].hops[1].to, rawMall.hops[1].to);
+const mallSpread = (list) => {
+  let max = 0;
+  for (const a of list) {
+    for (const b of list) {
+      max = Math.max(max, Math.hypot(a.hops[0].to[0] - b.hops[0].to[0], a.hops[0].to[1] - b.hops[0].to[1]));
+    }
+  }
+  return max;
+};
+assert.ok(mallSpread(deskMall) < 40);
 
 console.log("preset", preset.name, describePath(hero), fine.counts);
 console.log("ifc2", presetIfc(presetDrawn).length, "phone", presetIfc(presetPhone).length);

@@ -621,13 +621,14 @@ export function selectDrawn(paths, mode, hero, showHop2, options = {}) {
   if (hero && list.includes(hero)) drawn.push(hero);
   for (const key of Object.keys(cap)) {
     buckets[key].sort((a, b) => b.energy - a.energy);
-    drawn.push(...buckets[key].slice(0, cap[key]));
+    const rows = key === "neighbor" ? reserveMallPaths(buckets[key], hero, mobile) : buckets[key];
+    drawn.push(...rows.slice(0, cap[key]));
   }
   const mapped = drawn.map((path) => {
     const hops = !showHop2 && path.hops.length > 1 ? [path.hops[0]] : path.hops;
     return { ...path, hops, featured: path === hero };
   });
-  return pruneIfc2Column(pruneLowSunNeighbor(pruneLowSunSky(mapped, options), options), options);
+  return pruneMallScatter(pruneIfc2Column(pruneLowSunNeighbor(pruneLowSunSky(mapped, options), options), options), options);
 }
 
 function hopDirection(hop) {
@@ -776,6 +777,129 @@ export function pruneIfc2Column(drawn, options = {}) {
     for (const stroke of aux) {
       if (!kept.has(stroke)) drop.add(`${stroke.pathIndex}:${stroke.hopIndex}`);
     }
+  }
+  return withoutHops(drawn, drop);
+}
+
+function mallNeighborStroke(path, pathIndex) {
+  const name = path.neighborName || "";
+  if (!name.includes("商場") || !path.hops) return null;
+  for (let hopIndex = 0; hopIndex < path.hops.length; hopIndex += 1) {
+    const hop = path.hops[hopIndex];
+    if (hop.kind !== "neighbor") continue;
+    const next = path.hops[hopIndex + 1];
+    const hop2Len = next ? dist(next.from, next.to) : 0;
+    return {
+      path,
+      pathIndex,
+      hopIndex,
+      featured: path.featured === true,
+      z: hop.from[2],
+      x: hop.to[0],
+      y: hop.to[1],
+      energy: path.energy || 0,
+      hop2: next ? next.kind : "",
+      hop2Len,
+    };
+  }
+  return null;
+}
+
+function mallReadability(stroke) {
+  let score = stroke.energy;
+  if (stroke.featured) score += 100;
+  if (stroke.hop2 === "water" || stroke.hop2 === "street") score += 5;
+  else if (stroke.hop2 === "ground") score += 2.5;
+  else if (stroke.hop2 === "sky") score += 2;
+  else if (stroke.hop2 === "neighbor" && stroke.hop2Len < 6) score -= 4;
+  else if (stroke.hop2 === "neighbor") score += 1;
+  return score + Math.min(stroke.hop2Len, 120) / 40;
+}
+
+function clusterMallLandings(strokes) {
+  const clusters = [];
+  for (const stroke of strokes) {
+    let cluster = clusters.find((group) => Math.hypot(group[0].x - stroke.x, group[0].y - stroke.y) < 40);
+    if (!cluster) {
+      cluster = [];
+      clusters.push(cluster);
+    }
+    cluster.push(stroke);
+  }
+  return clusters;
+}
+
+/**
+ * Pink strokes onto 國際金融中心商場 land on separate wings.
+ * Keep the wing that holds the hero, otherwise the wing with the most strokes,
+ * and on that wing the readable polyline plus one auxiliary far up the facade.
+ * A pair already on one wing stays. The 二期 harbour polyline is another name.
+ */
+function chooseMallStrokes(strokes, mobile) {
+  if (strokes.length < 2) return strokes;
+  const clusters = clusterMallLandings(strokes);
+  if (clusters.length === 1 && strokes.length < 3) return strokes;
+  const gap = mobile ? 64 : 48;
+  let primary = clusters.find((group) => group.some((stroke) => stroke.featured));
+  if (!primary) {
+    primary = clusters.slice().sort((a, b) => {
+      const score = (group) => group.reduce((sum, stroke) => sum + mallReadability(stroke), 0);
+      return b.length - a.length || score(b) - score(a);
+    })[0];
+  }
+  const ranked = primary.slice().sort((a, b) => mallReadability(b) - mallReadability(a) || b.z - a.z);
+  const anchor = ranked.find((stroke) => stroke.featured) || ranked[0];
+  const kept = [anchor];
+  const keptZ = [anchor.z];
+  const aux = ranked
+    .filter((stroke) => stroke !== anchor)
+    .sort((a, b) => Math.abs(b.z - anchor.z) - Math.abs(a.z - anchor.z));
+  let count = 0;
+  for (const stroke of aux) {
+    if (count >= 1) break;
+    if (keptZ.some((z) => Math.abs(z - stroke.z) < gap)) continue;
+    kept.push(stroke);
+    keptZ.push(stroke.z);
+    count += 1;
+  }
+  for (const stroke of strokes) {
+    if (stroke.featured && !kept.includes(stroke)) kept.push(stroke);
+  }
+  return kept;
+}
+
+/** Keep the mall stroke the draw budget would otherwise slice off. */
+function reserveMallPaths(rows, hero, mobile) {
+  const mall = rows.filter((path) => mallNeighborStroke(path, 0));
+  if (mall.length < 2) return rows;
+  const pool = mall.slice();
+  if (hero && mallNeighborStroke(hero, -1)) pool.push({ ...hero, featured: true });
+  const strokes = pool.map((path, index) => mallNeighborStroke(path, index)).filter(Boolean);
+  const keptPaths = new Set(chooseMallStrokes(strokes, mobile).map((stroke) => stroke.path));
+  const keptMall = mall.filter((path) => keptPaths.has(path));
+  const others = rows.filter((path) => !mall.includes(path));
+  return [...keptMall, ...others];
+}
+
+/**
+ * Gather afternoon pink strokes on the mall into one wing.
+ * A second hop that only re-hits the podium within a few metres is a kink, not a hop.
+ * Endpoints of a kept hop are not shortened. Runs at any sun height.
+ */
+export function pruneMallScatter(drawn, options = {}) {
+  const strokes = [];
+  drawn.forEach((path, pathIndex) => {
+    const stroke = mallNeighborStroke(path, pathIndex);
+    if (stroke) strokes.push(stroke);
+  });
+  const kept = new Set(chooseMallStrokes(strokes, options.mobile === true));
+  const drop = new Set();
+  for (const stroke of strokes) {
+    if (!kept.has(stroke)) drop.add(`${stroke.pathIndex}:${stroke.hopIndex}`);
+  }
+  for (const stroke of kept) {
+    if (stroke.featured) continue;
+    if (stroke.hop2 === "neighbor" && stroke.hop2Len < 6) drop.add(`${stroke.pathIndex}:${stroke.hopIndex + 1}`);
   }
   return withoutHops(drawn, drop);
 }

@@ -105,6 +105,19 @@ function makeTexture(kind) {
     g.fillRect(0, 0, 128, 7);
     g.fillStyle = "rgba(60,46,34,0.16)";
     for (let x = 0; x < 128; x += 32) g.fillRect(x, 0, 2, 128);
+  } else if (kind === "shop") {
+    g.fillStyle = "#1a2024";
+    g.fillRect(0, 0, 128, 128);
+    g.fillStyle = "#7e97a6";
+    g.fillRect(7, 14, 114, 96);
+    g.fillStyle = "rgba(214, 168, 112, 0.55)";
+    g.fillRect(7, 74, 114, 36);
+    g.fillStyle = "rgba(255,255,255,0.28)";
+    g.fillRect(14, 22, 18, 28);
+    g.fillStyle = "#12161a";
+    g.fillRect(61, 14, 6, 96);
+    g.fillRect(0, 0, 128, 10);
+    g.fillRect(0, 114, 128, 14);
   } else {
     g.fillStyle = "#8ea0ac";
     g.fillRect(0, 0, 128, 128);
@@ -263,6 +276,10 @@ function buildCity(tile, focus) {
   const inferred = new THREE.MeshStandardMaterial({ map: glassTex, color: 0xe7c9a4, roughness: 0.48, metalness: 0.06 });
   const measuredLow = new THREE.MeshStandardMaterial({ map: stoneTex, color: 0xb7c4c8, roughness: 0.9, metalness: 0 });
   const inferredLow = new THREE.MeshStandardMaterial({ map: stoneTex, color: 0xd9c4a4, roughness: 0.92, metalness: 0 });
+  const shopTex = makeTexture("shop");
+  const shop = new THREE.MeshStandardMaterial({ map: shopTex, color: 0xe7eef2, roughness: 0.34, metalness: 0.16 });
+  addGlassFresnel(shop, 0.22);
+  const shopWalls = { positions: [], uvs: [] };
   const buckets = {
     measured: { positions: [], uvs: [], roofs: [] },
     inferred: { positions: [], uvs: [], roofs: [] },
@@ -288,8 +305,13 @@ function buildCity(tile, focus) {
       building.bbox.max[1] - building.bbox.min[1],
     );
     const inset = span < 3 ? 0.05 : span < 8 ? 0.18 : 0.58;
+    const z0 = building.minHeight || 0;
+    const z1 = building.height;
+    // IFC mall meets the street as a shopfront. The glass above stays in its height bucket.
+    const shopTop = (building.name || "").includes("商場") && z1 - z0 >= 9 ? Math.min(z1 - 1.2, z0 + 7.2) : z0;
     for (const edge of building.edges) {
-      addInsetWall(bucket.positions, bucket.uvs, edge, building.minHeight || 0, building.height, inset);
+      if (shopTop > z0 + 0.4) addInsetWall(shopWalls.positions, shopWalls.uvs, edge, z0, shopTop, inset);
+      addInsetWall(bucket.positions, bucket.uvs, edge, shopTop, z1, inset);
     }
     addRoof(bucket.roofs, building);
   }
@@ -302,6 +324,7 @@ function buildCity(tile, focus) {
     if (!bucket.roofs.length) continue;
     city.add(meshFrom(bucket.roofs, null, new THREE.MeshStandardMaterial({ color: roofColors[name], roughness: 0.92 }), true));
   }
+  if (shopWalls.positions.length) city.add(meshFrom(shopWalls.positions, shopWalls.uvs, shop, true));
   if (far.positions.length) {
     city.add(meshFrom(
       far.positions,
