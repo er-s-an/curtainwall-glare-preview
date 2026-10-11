@@ -627,7 +627,7 @@ export function selectDrawn(paths, mode, hero, showHop2, options = {}) {
     const hops = !showHop2 && path.hops.length > 1 ? [path.hops[0]] : path.hops;
     return { ...path, hops, featured: path === hero };
   });
-  return pruneLowSunNeighbor(pruneLowSunSky(mapped, options), options);
+  return pruneIfc2Column(pruneLowSunNeighbor(pruneLowSunSky(mapped, options), options), options);
 }
 
 function hopDirection(hop) {
@@ -693,6 +693,10 @@ function pruneParallelStrokes(drawn, options, spec) {
       if (!kept.has(stroke)) drop.add(`${stroke.pathIndex}:${stroke.hopIndex}`);
     }
   }
+  return withoutHops(drawn, drop);
+}
+
+function withoutHops(drawn, drop) {
   if (!drop.size) return drawn;
   const next = [];
   drawn.forEach((path, pathIndex) => {
@@ -712,6 +716,68 @@ export function pruneLowSunSky(drawn, options = {}) {
 /** Pink neighbour strokes read heavier than sky, so the comb keeps one auxiliary. */
 export function pruneLowSunNeighbor(drawn, options = {}) {
   return pruneParallelStrokes(drawn, options, { kind: "neighbor", gap: [64, 42], cap: [1, 1] });
+}
+
+/**
+ * Default afternoon sends a floor-by-floor comb onto 國際金融中心二期.
+ * Keep the hero polyline (on to the harbour) and one auxiliary far up the
+ * facade. A pair is already readable, so it stays. Endpoints are not shortened.
+ * Other towers are left for a later pass. Runs at any sun height.
+ */
+export function pruneIfc2Column(drawn, options = {}) {
+  const mobile = options.mobile === true;
+  const gap = mobile ? 64 : 48;
+  const cap = 1;
+  const strokes = [];
+  drawn.forEach((path, pathIndex) => {
+    const name = path.neighborName || "";
+    if (!name.includes("二期")) return;
+    path.hops.forEach((hop, hopIndex) => {
+      if (hop.kind !== "neighbor") return;
+      strokes.push({
+        pathIndex,
+        hopIndex,
+        featured: path.featured === true,
+        z: hop.from[2],
+        x: hop.to[0],
+        y: hop.to[1],
+      });
+    });
+  });
+  if (strokes.length < 3) return drawn;
+  const clusters = [];
+  for (const stroke of strokes) {
+    let cluster = clusters.find((group) => Math.hypot(group[0].x - stroke.x, group[0].y - stroke.y) < 22);
+    if (!cluster) {
+      cluster = [];
+      clusters.push(cluster);
+    }
+    cluster.push(stroke);
+  }
+  const drop = new Set();
+  for (const cluster of clusters) {
+    if (cluster.length < 3) continue;
+    const aux = cluster.filter((stroke) => !stroke.featured).sort((a, b) => a.z - b.z);
+    const keptZ = cluster.filter((stroke) => stroke.featured).map((stroke) => stroke.z);
+    const order = [];
+    for (let lo = 0, hi = aux.length - 1; lo <= hi; lo += 1, hi -= 1) {
+      order.push(aux[lo]);
+      if (hi !== lo) order.push(aux[hi]);
+    }
+    const kept = new Set();
+    let count = 0;
+    for (const stroke of order) {
+      if (count >= cap) break;
+      if (keptZ.some((z) => Math.abs(z - stroke.z) < gap)) continue;
+      kept.add(stroke);
+      keptZ.push(stroke.z);
+      count += 1;
+    }
+    for (const stroke of aux) {
+      if (!kept.has(stroke)) drop.add(`${stroke.pathIndex}:${stroke.hopIndex}`);
+    }
+  }
+  return withoutHops(drawn, drop);
 }
 
 export const KIND_LABEL = {

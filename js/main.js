@@ -238,6 +238,18 @@ function addBoxRoof(positions, building) {
   pushUp(a, c, d);
 }
 
+function addGlassFresnel(material, amount) {
+  material.customProgramCacheKey = () => `glass-fresnel-${amount}`;
+  material.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace(
+      "#include <opaque_fragment>",
+      `float glance = pow(1.0 - clamp(dot(normalize(normal), normalize(vViewPosition)), 0.0, 1.0), 2.4);
+      outgoingLight = mix(outgoingLight, vec3(0.62, 0.76, 0.88), glance * ${amount.toFixed(2)});
+      #include <opaque_fragment>`,
+    );
+  };
+}
+
 function recordedHeight(building) {
   return building.measured === true || (building.measured == null && building.source === "height");
 }
@@ -246,6 +258,8 @@ function buildCity(tile, focus) {
   const glassTex = makeTexture("glass");
   const stoneTex = makeTexture("stone");
   const measured = new THREE.MeshStandardMaterial({ map: glassTex, color: 0xd5e1e8, roughness: 0.32, metalness: 0.18 });
+  // Grazing recorded glass picks up the sky. Head-on mullions stay in the texture.
+  addGlassFresnel(measured, 0.42);
   const inferred = new THREE.MeshStandardMaterial({ map: glassTex, color: 0xe7c9a4, roughness: 0.48, metalness: 0.06 });
   const measuredLow = new THREE.MeshStandardMaterial({ map: stoneTex, color: 0xb7c4c8, roughness: 0.9, metalness: 0 });
   const inferredLow = new THREE.MeshStandardMaterial({ map: stoneTex, color: 0xd9c4a4, roughness: 0.92, metalness: 0 });
@@ -919,6 +933,7 @@ function updateCurtain() {
       emissiveIntensity: 0.18,
       side: THREE.DoubleSide,
     });
+    addGlassFresnel(material, 0.28);
     view.curtain = new THREE.Mesh(geometry, material);
     view.scene.add(view.curtain);
   } else {

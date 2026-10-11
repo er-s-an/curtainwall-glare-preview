@@ -17,6 +17,7 @@ import {
   waterReflectance,
   pruneLowSunSky,
   pruneLowSunNeighbor,
+  pruneIfc2Column,
 } from "./js/optics.js";
 
 const north = toThree(0, 1, 0);
@@ -284,5 +285,71 @@ assert.equal(untouched, bounceDawn, "omitting elevation leaves the draw alone");
 const untouchedNeighbor = pruneLowSunNeighbor(bounceDawn, {});
 assert.equal(untouchedNeighbor, bounceDawn, "omitting elevation leaves neighbour strokes alone");
 
+function towerStack(name, land, waterAt) {
+  const paths = [];
+  for (let i = 0; i < 6; i += 1) {
+    const z = 110 + i * 18;
+    const toWater = i === waterAt;
+    paths.push({
+      origin: [0, 0, z],
+      energy: 0.02,
+      kind: "neighbor",
+      neighborName: name,
+      hops: [
+        { from: [0, 0, z], to: [land[0], land[1], z - 70], kind: "neighbor" },
+        {
+          from: [land[0], land[1], z - 70],
+          to: toWater ? [-300, 440, 0] : [land[0] - 18, land[1] + 28, 30],
+          kind: toWater ? "water" : "roof",
+        },
+      ],
+    });
+  }
+  return paths;
+}
+
+const ifcPaths = towerStack("國際金融中心二期", [-105, 144], 5);
+const ifcHero = pickHero(ifcPaths, "reflect");
+const ifcNoon = selectDrawn(ifcPaths, "reflect", ifcHero, true, { elevationDeg: 30.2 });
+const ifcPhone = selectDrawn(ifcPaths, "reflect", ifcHero, true, { elevationDeg: 30.2, mobile: true });
+const ifcHops = (list) => list.filter((path) => (path.neighborName || "").includes("二期") && path.hops[0].kind === "neighbor");
+assert.equal(ifcHops(ifcNoon).length, 2, "afternoon IFC2 keeps the hero plus one spaced auxiliary");
+assert.equal(ifcHops(ifcPhone).length, 2, "a phone keeps the IFC2 hero plus one farther auxiliary");
+const ifcKept = ifcHops(ifcNoon).find((path) => path.featured);
+assert.ok(ifcKept && ifcKept.hops.length === 2 && ifcKept.hops[1].kind === "water");
+assert.deepEqual(ifcKept.hops[0].to, ifcHero.hops[0].to, "the IFC2 pink stroke is not shortened");
+assert.deepEqual(ifcKept.hops[1].to, ifcHero.hops[1].to, "the harbour hop is not shortened");
+const ifcZ = ifcHops(ifcNoon).map((path) => path.hops[0].from[2]).sort((a, b) => a - b);
+assert.ok(ifcZ[1] - ifcZ[0] >= 48, "afternoon IFC2 strokes stay apart in height");
+const phoneZ = ifcHops(ifcPhone).map((path) => path.hops[0].from[2]).sort((a, b) => a - b);
+assert.ok(phoneZ[1] - phoneZ[0] >= 64, "the phone auxiliary sits farther from the hero");
+const pair = ifcPaths.slice(4);
+const pairHero = pickHero(pair, "reflect");
+const pairDrawn = selectDrawn(pair, "reflect", pairHero, true, { elevationDeg: 30.2 });
+assert.equal(pairDrawn.length, 2, "two IFC2 strokes are already readable");
+const mallPaths = towerStack("國際金融中心商場", [-150, 130], 5);
+const mallHero = pickHero(mallPaths, "reflect");
+const mallTagged = mallPaths.map((path) => ({ ...path, featured: path === mallHero }));
+assert.equal(pruneIfc2Column(mallTagged, { elevationDeg: 30.2 }).length, mallTagged.length, "other towers keep their afternoon strokes");
+const mallDrawn = selectDrawn(mallPaths, "reflect", mallHero, true, { elevationDeg: 30.2 });
+assert.ok(mallDrawn.some((path) => path.featured && path.hops[1].kind === "water"));
+
+const presetDrawn = selectDrawn(fine.paths, "reflect", hero, true, { elevationDeg: pos.elevationDeg });
+const presetPhone = selectDrawn(fine.paths, "reflect", hero, true, { mobile: true, elevationDeg: pos.elevationDeg });
+const presetIfc = (list) => list.filter((path) => (path.neighborName || "").includes("二期") && path.hops[0] && path.hops[0].kind === "neighbor");
+assert.ok(pos.elevationDeg > 20, "the preset afternoon sun is well above the low-sun prune");
+assert.equal(presetIfc(presetDrawn).length, 2, "the real 15:00 comb onto 二期 thins to two strokes");
+assert.equal(presetIfc(presetPhone).length, 2, "the phone 15:00 comb onto 二期 thins to two strokes");
+const presetHero = presetDrawn.find((path) => path.featured);
+assert.equal(presetHero.hops[1].kind, "water");
+assert.deepEqual(presetHero.hops[0].to, hero.hops[0].to);
+assert.deepEqual(presetHero.hops[1].to, hero.hops[1].to);
+const presetZ = presetIfc(presetDrawn).map((path) => path.hops[0].from[2]).sort((a, b) => a - b);
+assert.ok(presetZ[1] - presetZ[0] >= 48);
+const afternoonStreet = selectDrawn(fine.paths, "street", streetHero, true, { elevationDeg: pos.elevationDeg });
+assert.ok(afternoonStreet.some((path) => path.featured && path.hops.some((hop) => hop.kind === "street")));
+assert.ok(afternoonStreet.filter((path) => (path.neighborName || "").includes("二期")).length >= 1);
+
 console.log("preset", preset.name, describePath(hero), fine.counts);
+console.log("ifc2", presetIfc(presetDrawn).length, "phone", presetIfc(presetPhone).length);
 console.log("optics ok");
