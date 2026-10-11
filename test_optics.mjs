@@ -453,6 +453,55 @@ const otherRoofs = roofPair.map((path) => ({ ...path, neighborName: "交易廣�
 assert.equal(pruneMallRoof(otherRoofs).length, 2, "roof strokes on other buildings stay");
 assert.equal(pruneMallRoof(ifcTagged, { elevationDeg: 30.2 }).length, ifcTagged.length, "二期 strokes are not mall roof strokes");
 assert.equal(pruneMallRoof(fan, { elevationDeg: 30.2 }).length, fan.length, "mall pink strokes are not roof strokes");
+const besideGlass = {
+  energy: 0.05,
+  kind: "roof",
+  neighborName: "國際金融中心商場",
+  hops: [{ from: [-20, 40, 104], to: [-106.9, 143.1, 30], kind: "roof" }],
+};
+const westRoof = {
+  energy: 0.05,
+  kind: "roof",
+  neighborName: "國際金融中心商場",
+  hops: [{ from: [-180, 70, 50], to: [-251.9, 111.1, 30.6], kind: "roof" }],
+};
+const westSpeck = {
+  energy: 0.05,
+  kind: "roof",
+  neighborName: "國際金融中心商場",
+  hops: [{ from: [-280, 108, 32], to: [-286.5, 109.2, 30], kind: "roof" }],
+};
+const glassAnchor = {
+  energy: 0.02,
+  kind: "neighbor",
+  neighborName: "國際金融中心二期",
+  hops: [{ from: [0, 0, 104], to: [-103.5, 149.9, 32.9], kind: "neighbor" }],
+};
+const farRoof = pruneMallRoof([besideGlass, westRoof, westSpeck, glassAnchor]);
+const westKept = farRoof.filter((path) => (path.neighborName || "").includes("商場"));
+assert.equal(westKept.length, 1, "the mall roof beside the glass loses to the farther roof");
+assert.deepEqual(westKept[0].hops[0].to, westRoof.hops[0].to, "the longer west-roof stroke is the one that stays");
+assert.deepEqual(westKept[0].hops[0].from, westRoof.hops[0].from, "the farther mall roof stroke is not shortened");
+assert.equal(farRoof.find((path) => (path.neighborName || "").includes("二期")).hops.length, 1, "the glass anchor is not a mall roof");
+const crowded = pruneMallRoof([
+  besideGlass,
+  {
+    energy: 0.05,
+    kind: "roof",
+    neighborName: "國際金融中心商場",
+    hops: [{ from: [-100, 120, 40], to: [-142.2, 140.2, 30], kind: "roof" }],
+  },
+  glassAnchor,
+]);
+assert.deepEqual(
+  crowded.find((path) => (path.neighborName || "").includes("商場")).hops[0].to,
+  besideGlass.hops[0].to,
+  "with no farther roof, the longer mall roof stroke stays",
+);
+assert.deepEqual(
+  crowded.find((path) => (path.neighborName || "").includes("商場")).hops[0].from,
+  besideGlass.hops[0].from,
+);
 const deskRoof = mallRoofPaths(presetDrawn);
 const phoneRoof = mallRoofPaths(presetPhone);
 assert.equal(deskRoof.length, 1, "the real 15:00 mall roof keeps one short stroke");
@@ -600,8 +649,38 @@ assert.deepEqual(phoneLiveAux.hops[0].from, rawPhoneAux.hops[0].from);
 const phoneMallLive = mallPink(phoneDrawn);
 const phoneRoofLive = mallRoofPaths(phoneDrawn);
 assert.equal(phoneMallLive.length, 1, "the phone mall pink stroke stays one line");
-assert.equal(phoneRoofLive.length, 1, "the phone mall roof stroke stays one line");
+assert.equal(phoneRoofLive.length, 1, "the phone keeps one mall roof stroke, the one farther from the glass");
 assert.equal(phoneRoofLive[0].hops.length, 1);
+function glassClearance(list, hop) {
+  let best = Infinity;
+  for (const path of list) {
+    if (!(path.neighborName || "").includes("二期") || !path.hops) continue;
+    for (const glass of path.hops) {
+      if (glass.kind !== "neighbor") continue;
+      best = Math.min(best, Math.hypot(hop.to[0] - glass.to[0], hop.to[1] - glass.to[1], hop.to[2] - glass.to[2]));
+    }
+  }
+  return best;
+}
+assert.ok(glassClearance(fine.paths, deskRoof[0].hops[0]) > 100, "the desk mall roof stays on the west roof");
+assert.ok(hopLen(deskRoof[0].hops[0]) > 70 && hopLen(deskRoof[0].hops[0]) < 90, "the desk west-roof stroke stays about seventy-eight metres");
+assert.ok(glassClearance(phoneTrace.paths, phoneRoofLive[0].hops[0]) > 100, "the phone mall roof lands far from the 二期 glass");
+assert.ok(hopLen(phoneRoofLive[0].hops[0]) > 40 && hopLen(phoneRoofLive[0].hops[0]) < 80, "the phone keeps the west-roof run, not the two-hundred-metre stroke beside the glass");
+const rawPhoneRoof = phoneTrace.paths.find((path) => path.hops[0]
+  && path.hops[0].kind === "roof"
+  && (path.neighborName || "").includes("商場")
+  && path.hops[0].from[2] === phoneRoofLive[0].hops[0].from[2]
+  && path.hops[0].to[0] === phoneRoofLive[0].hops[0].to[0]
+  && path.hops[0].to[1] === phoneRoofLive[0].hops[0].to[1]);
+assert.ok(rawPhoneRoof, "the phone mall roof stroke is one of the traced hits");
+assert.deepEqual(phoneRoofLive[0].hops[0].to, rawPhoneRoof.hops[0].to, "the phone mall roof stroke is not shortened");
+assert.deepEqual(phoneRoofLive[0].hops[0].from, rawPhoneRoof.hops[0].from);
+assert.ok(phoneTrace.paths.some((path) => path.hops[0]
+  && path.hops[0].kind === "roof"
+  && (path.neighborName || "").includes("商場")
+  && glassClearance(phoneTrace.paths, path.hops[0]) < 12), "the crowded landing beside the glass is still traced, and not drawn");
+assert.equal(phoneMallLive.length, 1, "choosing the far mall roof does not spread the pink mall stroke");
+assert.notEqual(phoneMallLive[0].hops[0].kind, "roof");
 
 console.log("preset", preset.name, describePath(hero), fine.counts);
 console.log("ifc2", presetIfc(presetDrawn).length, "phone", presetIfc(presetPhone).length);

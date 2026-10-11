@@ -621,7 +621,11 @@ export function selectDrawn(paths, mode, hero, showHop2, options = {}) {
   if (hero && list.includes(hero)) drawn.push(hero);
   for (const key of Object.keys(cap)) {
     buckets[key].sort((a, b) => b.energy - a.energy);
-    const rows = key === "neighbor" ? reserveMallPaths(buckets[key], hero, mobile) : buckets[key];
+    const rows = key === "neighbor"
+      ? reserveMallPaths(buckets[key], hero, mobile)
+      : key === "roof"
+        ? reserveFarMallRoof(buckets[key], list)
+        : buckets[key];
     drawn.push(...rows.slice(0, cap[key]));
   }
   const mapped = drawn.map((path) => {
@@ -933,22 +937,98 @@ function mallRoofStroke(path, pathIndex) {
   if (path.hops[0].kind !== "roof") return null;
   const hop = path.hops[0];
   return {
+    path,
     pathIndex,
     hopIndex: 0,
     featured: path.featured === true,
     z: hop.from[2],
     x: hop.to[0],
+    y: hop.to[1],
+    landZ: hop.to[2],
     length: dist(hop.from, hop.to),
     energy: path.energy || 0,
   };
 }
 
+function ifcGlassPoints(paths) {
+  const points = [];
+  for (const path of paths) {
+    if (!(path.neighborName || "").includes("國際金融中心二期") || !path.hops) continue;
+    for (const hop of path.hops) {
+      if (hop.kind === "neighbor") points.push(hop.to);
+    }
+  }
+  return points;
+}
+
+function clearanceOf(stroke, glass) {
+  if (!glass.length) return Infinity;
+  const land = [stroke.x, stroke.y, stroke.landZ];
+  let best = Infinity;
+  for (const point of glass) {
+    const gap = dist(land, point);
+    if (gap < best) best = gap;
+  }
+  return best;
+}
+
 /**
- * Direct hits on 國際金融中心商場's roof still leave two short strokes
- * with separate landings. Keep one full stroke: the hero if it is one of
- * them, otherwise the longer run. A single stroke stays. Pink mall wings
- * and the 二期 harbour polyline are other kinds. The kept hop is not shortened.
- * Runs at any sun height.
+ * The podium beside 國際金融中心二期 sits within about sixty metres of that
+ * glass. The phone landing there is about eight metres out and shares the
+ * auxiliary's layer. The west roof is past a hundred metres.
+ */
+const MALL_ROOF_BESIDE_GLASS = 64;
+
+function chooseMallRoof(strokes, glass) {
+  if (!strokes.length) return null;
+  const featured = strokes.find((stroke) => stroke.featured);
+  if (featured) return featured;
+  const scored = strokes.map((stroke) => ({ stroke, clearance: clearanceOf(stroke, glass) }));
+  const far = scored.filter((row) => row.clearance >= MALL_ROOF_BESIDE_GLASS);
+  const beside = scored.filter((row) => row.clearance < MALL_ROOF_BESIDE_GLASS);
+  // Only the afternoon contrast (one landing against the glass, one on a farther
+  // roof) changes the pick. Otherwise the longer run stays, including when no
+  // 二期 glass was hit and every clearance is unbounded.
+  const pool = far.length && beside.length ? far : scored;
+  pool.sort((a, b) => b.stroke.length - a.stroke.length
+    || b.clearance - a.clearance
+    || b.stroke.energy - a.stroke.energy
+    || b.stroke.x - a.stroke.x);
+  return pool[0].stroke;
+}
+
+/** The draw budget would otherwise fill with the long stroke beside the glass. */
+function reserveFarMallRoof(rows, paths) {
+  const strokes = [];
+  const others = [];
+  for (const path of rows) {
+    const stroke = mallRoofStroke(path, 0);
+    if (stroke) strokes.push(stroke);
+    else others.push(path);
+  }
+  if (strokes.length < 2) return rows;
+  const glass = ifcGlassPoints(paths);
+  if (!glass.length) return rows;
+  let far = 0;
+  let beside = 0;
+  for (const stroke of strokes) {
+    if (clearanceOf(stroke, glass) >= MALL_ROOF_BESIDE_GLASS) far += 1;
+    else beside += 1;
+  }
+  if (!far || !beside) return rows;
+  const kept = chooseMallRoof(strokes, glass);
+  return kept ? [kept.path, ...others] : rows;
+}
+
+/**
+ * Direct hits on 國際金融中心商場's roof can land on the west roof or on the
+ * podium beside 二期. Keep one full stroke: the hero if it is one of them,
+ * otherwise the longer run on the roof farther from that glass. A landing
+ * within about sixty metres shares the auxiliary's layer and loses when a
+ * farther roof was also hit. With no farther roof, or with no 二期 glass to
+ * measure against, the longer run stays. A single stroke stays. Pink mall
+ * wings and the 二期 harbour polyline are other kinds. The kept hop is not
+ * shortened. Runs at any sun height.
  */
 export function pruneMallRoof(drawn) {
   const strokes = [];
@@ -957,11 +1037,7 @@ export function pruneMallRoof(drawn) {
     if (stroke) strokes.push(stroke);
   });
   if (strokes.length < 2) return drawn;
-  const ranked = strokes.slice().sort((a, b) => {
-    if (a.featured !== b.featured) return a.featured ? -1 : 1;
-    return b.length - a.length || b.energy - a.energy || b.z - a.z || b.x - a.x;
-  });
-  const kept = ranked[0];
+  const kept = chooseMallRoof(strokes, ifcGlassPoints(drawn));
   const drop = new Set();
   for (const stroke of strokes) {
     if (stroke !== kept) drop.add(`${stroke.pathIndex}:${stroke.hopIndex}`);
