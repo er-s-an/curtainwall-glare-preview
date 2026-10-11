@@ -501,6 +501,15 @@ const otherRoof = {
     { from: [-104.8, 143.9, 42], to: [-123.1, 170.9, 30], kind: "roof" },
   ],
 };
+const nearRoof = {
+  energy: 0.02,
+  kind: "neighbor",
+  neighborName: "國際金融中心二期",
+  hops: [
+    { from: [0, 0, 104.5], to: [-103.5, 149.9, 32.9], kind: "neighbor" },
+    { from: [-103.5, 149.9, 32.9], to: [-107.1, 157.3, 30], kind: "roof" },
+  ],
+};
 const harbourLine = {
   featured: true,
   energy: 0.05,
@@ -511,7 +520,7 @@ const harbourLine = {
     { from: [-104.9, 143.6, 132.1], to: [-303.2, 439.9, 0.1], kind: "water" },
   ],
 };
-const kinkTrimmed = pruneIfc2GlassKink([glassKink, otherRoof, harbourLine, fan[1], roofPair[1]]);
+const kinkTrimmed = pruneIfc2GlassKink([glassKink, otherRoof, harbourLine, fan[1], roofPair[1], nearRoof]);
 assert.equal(kinkTrimmed[0].hops.length, 1, "a roof fold about a metre off the glass is not a hop");
 assert.deepEqual(kinkTrimmed[0].hops[0].to, glassKink.hops[0].to, "the pink stroke is not shortened");
 assert.deepEqual(kinkTrimmed[0].hops[0].from, glassKink.hops[0].from);
@@ -522,6 +531,10 @@ assert.deepEqual(kinkTrimmed[2].hops[1].to, harbourLine.hops[1].to, "the harbour
 assert.equal(kinkTrimmed[3].hops.length, 2, "a mall pink stroke is not an IFC2 kink");
 assert.equal(kinkTrimmed[4].hops.length, 1, "the remaining mall roof stroke is not split");
 assert.deepEqual(kinkTrimmed[4].hops[0].to, roofPair[1].hops[0].to);
+assert.ok(hopLen(nearRoof.hops[1]) > 8 && hopLen(nearRoof.hops[1]) < 10, "the sample is the nine-metre roof landing");
+assert.equal(kinkTrimmed[5].hops.length, 1, "a roof landing about nine metres off the glass is not a hop");
+assert.deepEqual(kinkTrimmed[5].hops[0].to, nearRoof.hops[0].to, "the nine-metre pink stroke is not shortened");
+assert.deepEqual(kinkTrimmed[5].hops[0].from, nearRoof.hops[0].from);
 const featuredKink = pruneIfc2GlassKink([{ ...glassKink, featured: true }]);
 assert.equal(featuredKink[0].hops.length, 2, "the featured polyline is not the fold this pass removes");
 
@@ -569,8 +582,21 @@ const phoneLiveHero = phoneIfc.find((path) => path.featured);
 const phoneLiveAux = phoneIfc.find((path) => !path.featured);
 assert.equal(phoneLiveHero.hops[1].kind, "water", "the phone harbour hop stays");
 assert.equal(phoneLiveHero.hops.length, 2);
-assert.ok(phoneLiveAux.hops[1] && phoneLiveAux.hops[1].kind === "roof" && hopLen(phoneLiveAux.hops[1]) > 4, "the phone auxiliary still lands on the other roof");
-assert.ok(hopLen(phoneLiveAux.hops[1]) < 20);
+assert.deepEqual(phoneLiveHero.hops[0].to, phoneHero.hops[0].to, "the phone harbour stroke is not shortened");
+assert.deepEqual(phoneLiveHero.hops[1].to, phoneHero.hops[1].to, "the phone harbour landing is not shortened");
+assert.equal(phoneLiveAux.hops.length, 1, "the phone auxiliary loses the nine-metre roof hop");
+assert.equal(phoneLiveAux.hops[0].kind, "neighbor");
+const rawPhoneAux = phoneTrace.paths.find((path) => path.hops[0]
+  && path.hops[0].kind === "neighbor"
+  && (path.neighborName || "").includes("二期")
+  && path.hops[0].from[2] === phoneLiveAux.hops[0].from[2]
+  && path.hops[0].to[0] === phoneLiveAux.hops[0].to[0]
+  && path.hops[1]
+  && path.hops[1].kind === "roof");
+assert.ok(rawPhoneAux, "the dropped hop is the traced roof landing");
+assert.ok(hopLen(rawPhoneAux.hops[1]) > 8 && hopLen(rawPhoneAux.hops[1]) < 10, "that landing sits about nine metres off the glass");
+assert.deepEqual(phoneLiveAux.hops[0].to, rawPhoneAux.hops[0].to, "the phone auxiliary pink stroke is not shortened");
+assert.deepEqual(phoneLiveAux.hops[0].from, rawPhoneAux.hops[0].from);
 const phoneMallLive = mallPink(phoneDrawn);
 const phoneRoofLive = mallRoofPaths(phoneDrawn);
 assert.equal(phoneMallLive.length, 1, "the phone mall pink stroke stays one line");

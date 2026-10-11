@@ -782,11 +782,12 @@ export function pruneIfc2Column(drawn, options = {}) {
 }
 
 /**
- * The afternoon auxiliary onto 國際金融中心二期 can bounce into a roof
- * fold about a metre off the glass. That kink is not a hop. A landing
- * that reaches another roof stays, and so does the harbour polyline.
- * Mall strokes are another name. The kept hop is not shortened.
- * Runs at any sun height.
+ * The afternoon auxiliary onto 國際金融中心二期 can bounce onto a roof
+ * within about twelve metres of the glass. That short fold is not a hop:
+ * the desk one sits about a metre off the glass, and the phone one lands
+ * about nine metres away on the next roof. A landing that reaches a roof
+ * farther away stays, and so does the harbour polyline. Mall strokes are
+ * another name. The kept hop is not shortened. Runs at any sun height.
  */
 export function pruneIfc2GlassKink(drawn) {
   const drop = new Set();
@@ -797,7 +798,7 @@ export function pruneIfc2GlassKink(drawn) {
     const hop = path.hops[0];
     const next = path.hops[1];
     if (!hop || hop.kind !== "neighbor" || !next || next.kind !== "roof") return;
-    if (dist(next.from, next.to) >= 4) return;
+    if (dist(next.from, next.to) >= 12) return;
     drop.add(`${pathIndex}:1`);
   });
   return withoutHops(drawn, drop);
