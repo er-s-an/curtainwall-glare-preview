@@ -795,6 +795,7 @@ function paintPaths() {
     view.paths = group;
     view.markers = marks;
     view.drawnCount = 0;
+    view.strokeCounts = {};
     view.scene.add(group);
     view.scene.add(marks);
     return;
@@ -804,6 +805,10 @@ function paintPaths() {
     elevationDeg: momentSun().pos.elevationDeg,
   });
   view.drawnCount = drawn.length;
+  view.strokeCounts = {};
+  for (const path of drawn) {
+    for (const hop of path.hops) view.strokeCounts[hop.kind] = (view.strokeCounts[hop.kind] || 0) + 1;
+  }
   const buckets = new Map();
   const pushSeg = (kind, a, b, featured) => {
     const distance = view.camera.position.distanceTo(a.clone().add(b).multiplyScalar(0.5));
@@ -835,6 +840,7 @@ function paintPaths() {
     for (const hop of path.hops) {
       const a = lift(hop.from[0], hop.from[1], hop.from[2]);
       const b = lift(hop.to[0], hop.to[1], hop.to[2]);
+      // Sky auxiliaries stop short. Neighbour strokes stay full length so the pink line does not fade into a stub.
       const end = !featured && hop.kind === "sky" ? a.clone().lerp(b, 0.62) : b;
       pushSeg(hop.kind, a, end, featured);
     }
@@ -942,9 +948,16 @@ function updateSun() {
     : [0, 0, 40];
   const elev = pos.elevationDeg;
   const look = skyLook(elev);
-  const place = v3(focus[0] + sun[0] * 640, focus[1] + sun[1] * 640, focus[2] + Math.max(sun[2], 0.04) * 640);
+  // A low sun throws the shadow far past the tower. Slide the shadow map
+  // down-light so the street is inside it, and keep the ray direction.
+  const horiz = Math.hypot(sun[0], sun[1]) || 1;
+  const shift = elev < 12 ? 260 : elev < 20 ? 90 : 0;
+  const cx = focus[0] - (sun[0] / horiz) * shift;
+  const cy = focus[1] - (sun[1] / horiz) * shift;
+  const cz = elev < 12 ? Math.max(10, focus[2] * 0.22) : focus[2];
+  const place = v3(cx + sun[0] * 720, cy + sun[1] * 720, cz + Math.max(sun[2], 0.04) * 720);
   view.sunLight.position.copy(place);
-  view.sunLight.target.position.copy(v3(focus[0], focus[1], focus[2]));
+  view.sunLight.target.position.copy(v3(cx, cy, cz));
   view.sunLight.target.updateMatrixWorld();
   view.sunLight.intensity = look.intensity;
   view.sunLight.color.set(look.sun);
@@ -982,7 +995,9 @@ function updateSun() {
     view.sunOrb.scale.setScalar(elev < 10 ? 1.7 : 1);
     view.sunOrb.material.color.set(look.sun);
   }
-  const half = elev < 14 ? 280 : 210;
+  const half = elev < 12 ? 440 : elev < 20 ? 300 : 210;
+  view.sunLight.shadow.bias = elev < 12 ? -0.0006 : -0.00035;
+  view.sunLight.shadow.normalBias = elev < 12 ? 0.5 : 1.15;
   const shadow = view.sunLight.shadow.camera;
   shadow.left = -half;
   shadow.right = half;
@@ -1046,6 +1061,7 @@ function retrace() {
     hero: view.hero ? describePath(view.hero) : "",
     heroHops: view.hero ? view.hero.hops.length : 0,
     drawn: view.drawnCount,
+    strokes: view.strokeCounts || {},
     occlusions: (view.result.occlusions || []).length,
     coarse: view.city ? view.city.userData.coarse : 0,
     quality: view.quality.low ? "low" : "high",

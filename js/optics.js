@@ -627,7 +627,7 @@ export function selectDrawn(paths, mode, hero, showHop2, options = {}) {
     const hops = !showHop2 && path.hops.length > 1 ? [path.hops[0]] : path.hops;
     return { ...path, hops, featured: path === hero };
   });
-  return pruneLowSunSky(mapped, options);
+  return pruneLowSunNeighbor(pruneLowSunSky(mapped, options), options);
 }
 
 function hopDirection(hop) {
@@ -639,22 +639,23 @@ function hopDirection(hop) {
 }
 
 /**
- * Below about 12° the same reflection direction leaves every floor, so sky
- * strokes stack into one comb. Keep the hero stroke and a few auxiliaries
- * spaced up the facade. Second hops to the sky are trimmed; the first hop stays.
- * Callers that omit elevationDeg keep the previous draw.
+ * Below about 12° one reflection direction leaves every floor and the strokes
+ * stack into a comb. Keep the hero stroke and a few auxiliaries spaced up the
+ * facade. Dropping the first hop drops that whole polyline; a later hop can
+ * go without taking the first hop with it. Callers that omit elevationDeg
+ * keep the previous draw. Endpoints are not shortened.
  */
-export function pruneLowSunSky(drawn, options = {}) {
+function pruneParallelStrokes(drawn, options, spec) {
   const elev = options.elevationDeg;
   if (typeof elev !== "number" || elev < 0 || elev >= 12) return drawn;
   const mobile = options.mobile === true;
-  const gap = mobile ? 48 : 36;
-  const cap = mobile ? 1 : 2;
+  const gap = mobile ? spec.gap[0] : spec.gap[1];
+  const cap = mobile ? spec.cap[0] : spec.cap[1];
   const families = [];
   const strokes = [];
   drawn.forEach((path, pathIndex) => {
     path.hops.forEach((hop, hopIndex) => {
-      if (hop.kind !== "sky") return;
+      if (hop.kind !== spec.kind) return;
       const dir = hopDirection(hop);
       let family = families.findIndex((sample) => sample[0] * dir[0] + sample[1] * dir[1] + sample[2] * dir[2] > 0.985);
       if (family < 0) {
@@ -701,6 +702,16 @@ export function pruneLowSunSky(drawn, options = {}) {
     next.push(hops.length === path.hops.length ? path : { ...path, hops });
   });
   return next;
+}
+
+/** Sky auxiliaries: two on a desk, one on a phone. */
+export function pruneLowSunSky(drawn, options = {}) {
+  return pruneParallelStrokes(drawn, options, { kind: "sky", gap: [48, 36], cap: [1, 2] });
+}
+
+/** Pink neighbour strokes read heavier than sky, so the comb keeps one auxiliary. */
+export function pruneLowSunNeighbor(drawn, options = {}) {
+  return pruneParallelStrokes(drawn, options, { kind: "neighbor", gap: [64, 42], cap: [1, 1] });
 }
 
 export const KIND_LABEL = {

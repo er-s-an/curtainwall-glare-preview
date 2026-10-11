@@ -16,6 +16,7 @@ import {
   drawBudget,
   waterReflectance,
   pruneLowSunSky,
+  pruneLowSunNeighbor,
 } from "./js/optics.js";
 
 const north = toThree(0, 1, 0);
@@ -259,14 +260,29 @@ assert.ok(skyHops(dawnPhone).some((hop) => hop.from[2] === stackedHero.hops[0].f
 
 const bounced = skyStack("neighbor");
 const bounceHero = bounced[2];
+const bounceNoon = selectDrawn(bounced, "reflect", bounceHero, true, { elevationDeg: 32 });
 const bounceDawn = selectDrawn(bounced, "reflect", bounceHero, true, { elevationDeg: 3.7 });
-assert.equal(bounceDawn.length, bounced.length > 8 ? 8 : bounced.length, "trimming a sky second hop keeps the neighbour stroke");
+const bouncePhone = selectDrawn(bounced, "reflect", bounceHero, true, { elevationDeg: 3.7, mobile: true });
+const neighHops = (list) => list.flatMap((path) => path.hops.filter((hop) => hop.kind === "neighbor"));
+assert.equal(bounceNoon.length, bounced.length, "a high sun still draws each neighbour stroke");
+assert.ok(neighHops(bounceDawn).length <= 2, "a low sun keeps the hero neighbour stroke plus one spaced auxiliary");
+assert.ok(neighHops(bounceDawn).length >= 2, "the low-sun neighbour comb still has the auxiliary");
 assert.ok(bounceDawn.every((path) => path.hops[0].kind === "neighbor"));
 const bounceSky = skyHops(bounceDawn);
 assert.ok(bounceSky.length <= 3 && bounceSky.length >= 1, "neighbour-to-sky combs collapse to a few strokes");
-assert.ok(bounceDawn.some((path) => path.featured && path.hops.length === 2));
+const dawnHero = bounceDawn.find((path) => path.featured);
+assert.ok(dawnHero && dawnHero.hops.length === 2, "the hero multi-hop stays intact");
+assert.deepEqual(dawnHero.hops[0].to, bounceHero.hops[0].to, "the pink stroke is not shortened");
+assert.deepEqual(dawnHero.hops[1].to, bounceHero.hops[1].to, "the second hop is not shortened");
+const pinkZ = neighHops(bounceDawn).map((hop) => hop.from[2]).sort((a, b) => a - b);
+for (let i = 1; i < pinkZ.length; i += 1) assert.ok(pinkZ[i] - pinkZ[i - 1] >= 42, "low-sun neighbour strokes stay apart in height");
+assert.ok(neighHops(bouncePhone).length <= neighHops(bounceDawn).length);
+assert.ok(neighHops(bouncePhone).length <= 2, "a phone keeps an even thinner low-sun neighbour comb");
+assert.ok(bouncePhone.some((path) => path.featured && path.hops.length === 2));
 const untouched = pruneLowSunSky(bounceDawn, {});
 assert.equal(untouched, bounceDawn, "omitting elevation leaves the draw alone");
+const untouchedNeighbor = pruneLowSunNeighbor(bounceDawn, {});
+assert.equal(untouchedNeighbor, bounceDawn, "omitting elevation leaves neighbour strokes alone");
 
 console.log("preset", preset.name, describePath(hero), fine.counts);
 console.log("optics ok");
