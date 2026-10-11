@@ -19,6 +19,7 @@ import {
   pruneLowSunNeighbor,
   pruneIfc2Column,
   pruneMallScatter,
+  pruneMallRoof,
 } from "./js/optics.js";
 
 const north = toThree(0, 1, 0);
@@ -419,6 +420,64 @@ const mallSpread = (list) => {
   return max;
 };
 assert.ok(mallSpread(deskMall) < 40);
+
+function mallRoofPaths(list) {
+  return list.filter((path) => (path.neighborName || "").includes("商場") && path.hops[0] && path.hops[0].kind === "roof");
+}
+const roofPair = [
+  {
+    energy: 0.05,
+    kind: "roof",
+    neighborName: "國際金融中心商場",
+    hops: [{ from: [-250, 90, 42.8], to: [-272, 106.1, 30.6], kind: "roof" }],
+  },
+  {
+    energy: 0.05,
+    kind: "roof",
+    neighborName: "國際金融中心商場",
+    hops: [{ from: [-180, 70, 57.8], to: [-232.7, 115.1, 30.6], kind: "roof" }],
+  },
+];
+const roofOne = pruneMallRoof(roofPair);
+assert.equal(roofOne.length, 1, "two separated mall roof strokes collapse to one");
+assert.deepEqual(roofOne[0].hops[0].to, roofPair[1].hops[0].to, "the longer mall roof stroke is the one that stays");
+assert.deepEqual(roofOne[0].hops[0].from, roofPair[1].hops[0].from, "the kept mall roof stroke is not shortened");
+assert.equal(pruneMallRoof(roofPair.slice(0, 1)).length, 1, "a single mall roof stroke stays");
+const featuredStub = roofPair.map((path, index) => ({ ...path, featured: index === 0 }));
+const featuredRoof = pruneMallRoof(featuredStub);
+assert.equal(featuredRoof.length, 1);
+assert.equal(featuredRoof[0].featured, true, "a featured mall roof stroke stays even when it is the shorter one");
+assert.deepEqual(featuredRoof[0].hops[0].to, roofPair[0].hops[0].to);
+const otherRoofs = roofPair.map((path) => ({ ...path, neighborName: "交易廣場" }));
+assert.equal(pruneMallRoof(otherRoofs).length, 2, "roof strokes on other buildings stay");
+assert.equal(pruneMallRoof(ifcTagged, { elevationDeg: 30.2 }).length, ifcTagged.length, "二期 strokes are not mall roof strokes");
+assert.equal(pruneMallRoof(fan, { elevationDeg: 30.2 }).length, fan.length, "mall pink strokes are not roof strokes");
+const deskRoof = mallRoofPaths(presetDrawn);
+const phoneRoof = mallRoofPaths(presetPhone);
+assert.equal(deskRoof.length, 1, "the real 15:00 mall roof keeps one short stroke");
+assert.equal(phoneRoof.length, 1, "the phone keeps that same mall roof stroke");
+assert.deepEqual(phoneRoof[0].hops[0].to, deskRoof[0].hops[0].to);
+assert.deepEqual(phoneRoof[0].hops[0].from, deskRoof[0].hops[0].from);
+const rawRoof = fine.paths.find((path) => path.hops[0]
+  && path.hops[0].kind === "roof"
+  && path.hops[0].from[2] === deskRoof[0].hops[0].from[2]
+  && path.hops[0].to[0] === deskRoof[0].hops[0].to[0]
+  && path.hops[0].to[1] === deskRoof[0].hops[0].to[1]);
+assert.ok(rawRoof, "the kept mall roof stroke is one of the traced hits");
+assert.deepEqual(deskRoof[0].hops[0].to, rawRoof.hops[0].to, "the mall roof stroke is not shortened");
+assert.deepEqual(deskRoof[0].hops[0].from, rawRoof.hops[0].from);
+const roofSpread = (list) => {
+  let max = 0;
+  for (const path of fine.paths) {
+    if (!path.hops[0] || path.hops[0].kind !== "roof" || !(path.neighborName || "").includes("商場")) continue;
+    max = Math.max(max, Math.hypot(path.hops[0].to[0] - list[0].hops[0].to[0], path.hops[0].to[1] - list[0].hops[0].to[1]));
+  }
+  return max;
+};
+assert.ok(roofSpread(deskRoof) > 20, "another mall roof landing exists and is not drawn");
+assert.equal(presetIfc(presetDrawn).length, 2, "collapsing the mall roof leaves the 二期 pair");
+assert.equal(presetHero.hops[1].kind, "water");
+assert.equal(deskMall.length, 1, "collapsing the mall roof does not spread the pink mall stroke");
 
 console.log("preset", preset.name, describePath(hero), fine.counts);
 console.log("ifc2", presetIfc(presetDrawn).length, "phone", presetIfc(presetPhone).length);

@@ -628,7 +628,7 @@ export function selectDrawn(paths, mode, hero, showHop2, options = {}) {
     const hops = !showHop2 && path.hops.length > 1 ? [path.hops[0]] : path.hops;
     return { ...path, hops, featured: path === hero };
   });
-  return pruneMallScatter(pruneIfc2Column(pruneLowSunNeighbor(pruneLowSunSky(mapped, options), options), options), options);
+  return pruneMallRoof(pruneMallScatter(pruneIfc2Column(pruneLowSunNeighbor(pruneLowSunSky(mapped, options), options), options), options), options);
 }
 
 function hopDirection(hop) {
@@ -900,6 +900,48 @@ export function pruneMallScatter(drawn, options = {}) {
   for (const stroke of kept) {
     if (stroke.featured) continue;
     if (stroke.hop2 === "neighbor" && stroke.hop2Len < 6) drop.add(`${stroke.pathIndex}:${stroke.hopIndex + 1}`);
+  }
+  return withoutHops(drawn, drop);
+}
+
+function mallRoofStroke(path, pathIndex) {
+  const name = path.neighborName || "";
+  if (!name.includes("商場") || !path.hops || !path.hops[0]) return null;
+  if (path.hops[0].kind !== "roof") return null;
+  const hop = path.hops[0];
+  return {
+    pathIndex,
+    hopIndex: 0,
+    featured: path.featured === true,
+    z: hop.from[2],
+    x: hop.to[0],
+    length: dist(hop.from, hop.to),
+    energy: path.energy || 0,
+  };
+}
+
+/**
+ * Direct hits on 國際金融中心商場's roof still leave two short strokes
+ * with separate landings. Keep one full stroke: the hero if it is one of
+ * them, otherwise the longer run. A single stroke stays. Pink mall wings
+ * and the 二期 harbour polyline are other kinds. The kept hop is not shortened.
+ * Runs at any sun height.
+ */
+export function pruneMallRoof(drawn) {
+  const strokes = [];
+  drawn.forEach((path, pathIndex) => {
+    const stroke = mallRoofStroke(path, pathIndex);
+    if (stroke) strokes.push(stroke);
+  });
+  if (strokes.length < 2) return drawn;
+  const ranked = strokes.slice().sort((a, b) => {
+    if (a.featured !== b.featured) return a.featured ? -1 : 1;
+    return b.length - a.length || b.energy - a.energy || b.z - a.z || b.x - a.x;
+  });
+  const kept = ranked[0];
+  const drop = new Set();
+  for (const stroke of strokes) {
+    if (stroke !== kept) drop.add(`${stroke.pathIndex}:${stroke.hopIndex}`);
   }
   return withoutHops(drawn, drop);
 }

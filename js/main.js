@@ -10,7 +10,7 @@ import {
   selectDrawn,
   describePath,
   tiltedPoint,
-} from "./optics.js";
+} from "./optics.js?v=20261011-r7";
 
 const $ = (id) => document.getElementById(id);
 const state = {
